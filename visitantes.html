@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de Visitantes - Semente Santa</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <img src="img/logo.png" alt="Logo da Igreja" class="logo">
+        <h1 class="church-name">Igreja Evangélica Internacional Semente Santa</h1>
+        <!-- Menu de Navegação -->
+        <div class="main-menu">
+            <a href="index.html" class="menu-item">Registro</a>
+            <a href="visitantes.html" class="menu-item active">Visualizar Visitantes</a>
+        </div>
+    </nav>
+    
+    <div class="container visitors-container">
+        <div class="card">
+            <h2>Listagem de Visitantes</h2>
+            
+            <!-- Filtros de Busca -->
+            <div class="search-filters">
+                <!-- Filtro de Data -->
+                <div class="filter-group">
+                    <label for="dateFilter">Data:</label>
+                    <div class="date-picker">
+                        <button id="dateFilterBtn" class="button button-outline">
+                            <span class="icon">📅</span>
+                            <span id="selectedFilterDate">Todos</span>
+                        </button>
+                        <div id="dateFilterDropdown" class="date-dropdown" style="display: none;">
+                            <input type="date" id="dateFilterInput" class="date-input">
+                            <button id="clearDateFilterBtn" class="button clear-filter">Limpar Filtro</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Pesquisa por Nome -->
+                <div class="filter-group">
+                    <label for="nameFilter">Nome:</label>
+                    <div class="search-container">
+                        <input type="text" id="nameFilter" placeholder="Buscar por nome..." class="input-field">
+                        <button id="searchBtn" class="button button-outline">Pesquisar</button>
+                    </div>
+                </div>
+                
+                <!-- Filtro Primeira Vez -->
+                <div class="filter-group checkbox-filter">
+                    <input type="checkbox" id="firstTimeFilter">
+                    <label for="firstTimeFilter">Apenas primeira vez</label>
+                </div>
+            </div>
+            
+            <!-- Estatísticas -->
+            <div class="stats">
+                <p>Total de Visitantes: <span id="totalVisitorsCount">0</span></p>
+                <p>Visitantes pela primeira vez: <span id="firstTimeVisitorsCount">0</span></p>
+            </div>
+            
+            <!-- Botão de Download -->
+            <button id="downloadBtn" class="button">
+                <span class="icon">📥</span>
+                <span>Baixar Lista Filtrada</span>
+            </button>
+            
+            <!-- Lista de Visitantes -->
+            <div class="visitors-table-container">
+                <table class="visitors-table">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Telefone</th>
+                            <th>Data</th>
+                            <th>Primeira Vez</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="visitorsTableBody">
+                        <!-- Os visitantes serão adicionados aqui dinamicamente -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Paginação -->
+            <div class="pagination">
+                <button id="prevPageBtn" class="page-button">Anterior</button>
+                <span id="pageInfo">Página 1 de 1</span>
+                <button id="nextPageBtn" class="page-button">Próxima</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Importação condicional da biblioteca Supabase -->
+    <script>
+        // Função para verificar se a biblioteca Supabase está disponível
+        function loadSupabase() {
+            const supabaseScript = document.createElement('script');
+            supabaseScript.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+            supabaseScript.onerror = function() {
+                console.log('Supabase não disponível. Usando apenas localStorage.');
+                // Se não conseguir carregar, inicia o script principal mesmo assim
+                initApp();
+            };
+            supabaseScript.onload = function() {
+                console.log('Supabase carregado com sucesso.');
+                // Inicia o script principal após carregar o Supabase
+                initApp();
+            };
+            document.body.appendChild(supabaseScript);
+        }
+        
+        // Função para iniciar a aplicação
+        function initApp() {
+            const appScript = document.createElement('script');
+            appScript.src = 'js/visitors-list.js';
+            document.body.appendChild(appScript);
+        }
+        
+        // Tenta carregar o Supabase
+        loadSupabase();
+    </script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro de Visitantes - Semente Santa</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <img src="img/logo.png" alt="Logo da Igreja" class="logo">
+        <h1 class="church-name">Igreja Evangélica Internacional Semente Santa</h1>
+        <!-- Menu de Navegação -->
+        <div class="main-menu">
+            <a href="index.html" class="menu-item active">Registro</a>
+            <a href="visitantes.html" class="menu-item">Visualizar Visitantes</a>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <div class="card">
+            <h2>Registro de Visitantes</h2>
+            
+            <!-- Seleção de Data para Registro -->
+            <div class="date-picker">
+                <button id="dateSelectorBtn" class="button button-outline">
+                    <span class="icon">📅</span>
+                    <span id="selectedDateText">Data do registro: </span>
+                </button>
+                <div id="datePickerDropdown" class="date-dropdown" style="display: none;">
+                    <input type="date" id="selectedDateInput" class="date-input">
+                </div>
+            </div>
+            
+            <!-- Formulário de Cadastro -->
+            <div style="margin-top: 12px;">
+                <input type="text" id="nameInput" placeholder="Nome" class="input-field">
+                <input type="tel" id="phoneInput" placeholder="Telefone" class="input-field">
+                
+                <div class="checkbox-container">
+                    <input type="checkbox" id="firstTimeCheckbox">
+                    <label for="firstTimeCheckbox">Primeira vez na Igreja</label>
+                </div>
+                
+                <button id="addVisitorBtn" class="button">Adicionar Visitante</button>
+            </div>
+            
+            <!-- Estatísticas da Data Atual -->
+            <div class="stats">
+                <p>Visitantes hoje: <span id="todayVisitorsCount">0</span></p>
+                <p>Primeira vez hoje: <span id="todayFirstTimeCount">0</span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script principal -->
+    <script src="js/register.js"></script>
+</body>
+</html>

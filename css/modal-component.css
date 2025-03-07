@@ -1,0 +1,200 @@
+/* Estilos para o Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s, visibility 0.3s;
+}
+
+.modal-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal-container {
+    background-color: white;
+    border-radius: 8px;
+    max-width: 500px;
+    width: 90%;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transform: translateY(-20px);
+    transition: transform 0.3s;
+}
+
+.modal-overlay.active .modal-container {
+    transform: translateY(0);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.modal-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #254d1c;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #666;
+}
+
+.modal-body {
+    margin-bottom: 20px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.modal-button {
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    border: none;
+}
+
+.modal-button-primary {
+    background-color: #254d1c;
+    color: white;
+}
+
+.modal-button-secondary {
+    background-color: #e2e2e2;
+    color: #333;
+}
+
+/* Estilos para as tags */
+.tag-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 5px;
+}
+
+.tag {
+    display: inline-block;
+    background-color: #e1eef5;
+    color: #254d1c;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+}
+
+.tag-button {
+    background: none;
+    border: 1px dashed #ccc;
+    color: #666;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 10px;
+}
+
+.tag-checkbox {
+    display: none;
+}
+
+.tag-item {
+    padding: 5px 10px;
+    background-color: #f0f0f0;
+    border-radius: 15px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.tag-checkbox:checked + .tag-item {
+    background-color: #254d1c;
+    color: white;
+}
+
+/* Estilos para detalhes expandidos */
+.visitor-details {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+    border-left: 3px solid #254d1c;
+}
+
+.detail-row {
+    display: flex;
+    margin-bottom: 5px;
+}
+
+.detail-label {
+    font-weight: bold;
+    width: 120px;
+    color: #555;
+}
+
+.expand-button {
+    background: none;
+    border: none;
+    color: #254d1c;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+}
+
+.expand-button:hover {
+    text-decoration: underline;
+}
+
+/* Status de acompanhamento */
+.status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-pending {
+    background-color: #fff8e6;
+    color: #e6a700;
+}
+
+.status-contacted {
+    background-color: #e1f5fe;
+    color: #0288d1;
+}
+
+.status-regular {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+}
+
+.status-inactive {
+    background-color: #f5f5f5;
+    color: #757575;
+}

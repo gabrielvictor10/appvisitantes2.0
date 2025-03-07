@@ -1,0 +1,361 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background-color: #254d1c;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+}
+
+/* Estilização da Navbar */
+.navbar {
+    background-color: #ffe604f5;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0);
+    padding: 0px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.logo {
+    height: 150px;
+}
+
+/* Estilo para o nome da igreja */
+.church-name {
+    color: #ffffff;
+    font-size: 25px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+/* Menu de Navegação */
+.main-menu {
+    background-color: #204218;
+    display: flex;
+    width: 100%;
+    padding: 10px 0;
+    justify-content: center;
+}
+
+.menu-item {
+    color: white;
+    text-decoration: none;
+    padding: 8px 16px;
+    margin: 0 5px;
+    border-radius: 4px;
+    font-weight: 500;
+    transition: background-color 0.3s;
+}
+
+.menu-item:hover {
+    background-color: #345e2a;
+}
+
+.menu-item.active {
+    background-color: #345e2a;
+    font-weight: bold;
+}
+
+/* Container principal */
+.container {
+    max-width: 400px;
+    width: 100%;
+    margin-top: 20px;
+}
+
+.visitors-container {
+    max-width: 900px;
+}
+
+/* Cartão do formulário */
+.card {
+    background-color: #f7f7f7;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    padding: 24px;
+}
+
+/* Logo dentro do formulário */
+.logo-container {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 16px;
+}
+
+.logo-container .logo {
+    height: 80px;
+}
+
+/* Estilização geral */
+h2 {
+    text-align: center;
+    margin-bottom: 16px;
+    color: #254d1c;
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.input-field {
+    width: 100%;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 16px;
+}
+
+.button {
+    width: 100%;
+    padding: 10px 12px;
+    background-color: #254d1c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    cursor: pointer;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.button:hover {
+    background-color: #45a049;
+}
+
+.button-outline {
+    background-color: transparent;
+    border: 1px solid #254d1c;
+    color: #254d1c;
+    text-align: left;
+    justify-content: flex-start;
+}
+
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.checkbox-container input {
+    margin-right: 8px;
+}
+
+.stats {
+    text-align: center;
+    margin: 12px 0;
+    color: #254d1c;
+    font-size: 14px;
+}
+
+.visitors-list {
+    margin-top: 16px;
+    max-height: 256px;
+    overflow-y: auto;
+    border-top: 1px solid #eee;
+}
+
+.visitor-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.remove-button {
+    background-color: #e53e3e;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+/* Estilo para a página de listagem de visitantes */
+.search-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+    background-color: #f0f0f0;
+    padding: 15px;
+    border-radius: 6px;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.filter-group label {
+    margin-bottom: 5px;
+    font-weight: 500;
+    color: #254d1c;
+}
+
+.search-container {
+    position: relative;
+}
+
+.checkbox-filter {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.checkbox-filter input {
+    margin-right: 8px;
+}
+
+.clear-filter {
+    margin-top: 5px;
+    padding: 5px;
+    font-size: 14px;
+    background-color: #e6e6e6;
+    color: #333;
+}
+
+.clear-filter:hover {
+    background-color: #d4d4d4;
+}
+
+/* Tabela de visitantes */
+.visitors-table-container {
+    width: 100%;
+    overflow-x: auto;
+    margin-top: 15px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.visitors-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.visitors-table th, 
+.visitors-table td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+.visitors-table th {
+    background-color: #254d1c;
+    color: white;
+    position: sticky;
+    top: 0;
+}
+
+.visitors-table tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+
+.visitors-table tr:hover {
+    background-color: #e9e9e9;
+}
+
+.visitor-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.first-time-badge {
+    display: inline-block;
+    background-color: #4c9aff;
+    color: white;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: 5px;
+}
+
+/* Paginação */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 20px;
+    gap: 10px;
+}
+
+.page-button {
+    background-color: #254d1c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.page-button:hover {
+    background-color: #45a049;
+}
+
+.page-button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+/* Estilos para Inputs de Data */
+.date-dropdown {
+    position: absolute;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 10px;
+    z-index: 10;
+    width: 100%;
+}
+
+.date-input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.date-picker {
+    position: relative;
+    width: 100%;
+}
+
+/* Ícones dentro de botões */
+.icon {
+    margin-right: 8px;
+}
+
+/* Responsividade */
+@media (max-width: 600px) {
+    .container {
+        padding: 10px;
+    }
+    
+    .navbar {
+        padding: 10px;
+    }
+    
+    .logo {
+        height: 100px;
+    }
+    
+    .church-name {
+        font-size: 20px;
+    }
+
+    
+}
