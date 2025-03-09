@@ -14,8 +14,10 @@ let pagination = {
 // Inicialização do Supabase com o método do arquivo "script.js"
 const supabaseUrl = 'https://qdttsbnsijllhkgrpdmc.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkdHRzYm5zaWpsbGhrZ3JwZG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExOTQzNDgsImV4cCI6MjA1Njc3MDM0OH0.CuZdeCC2wK73CrTt2cMIKxj20hAtgz_8qAhFt1EKkCw';
-const supabase = window.supabase ? window.supabase.createClient(supabaseUrl, supabaseKey) : null;
-const isSupabaseAvailable = !!window.supabase;
+// Garantir inicialização correta do cliente Supabase
+const supabase = supabaseUrl && supabaseKey ? 
+  (window.supabase ? window.supabase.createClient(supabaseUrl, supabaseKey) : null) : null;
+const isSupabaseAvailable = !!supabase;
 
 // Cache de elementos DOM para melhor performance
 const DOM = {
@@ -102,7 +104,22 @@ const DataManager = {
     if (!isSupabaseAvailable || !navigator.onLine) return;
     
     try {
-      const { data, error } = await supabase.from('visitors').select('*');
+      // Verificar conexão primeiro
+      const { data: connectionTest, error: connectionError } = await supabase
+        .from('visitors')
+        .select('count')
+        .limit(1);
+      
+      if (connectionError) {
+        console.warn('Problema de conexão com Supabase:', connectionError);
+        throw connectionError;
+      }
+      
+      // Conexão OK, buscar dados
+      const { data, error } = await supabase
+        .from('visitors')
+        .select('*')
+        .order('id', { ascending: false });
       
       if (error) throw error;
       
@@ -126,6 +143,9 @@ const DataManager = {
         
         // Atualiza a UI com novos dados
         this.processVisitors();
+        
+        // Tenta sincronizar operações pendentes
+        await this.processPendingOperations();
       }
     } catch (error) {
       console.error("Erro ao sincronizar com Supabase:", error);
@@ -139,6 +159,68 @@ const DataManager = {
           this.syncWithSupabase(retryCount + 1);
         }, timeout);
       }
+    }
+  },
+  
+  // Adicione este novo método para processar operações pendentes
+  async processPendingOperations() {
+    if (!isSupabaseAvailable || !navigator.onLine) return;
+    
+    try {
+      // Recuperar operações pendentes
+      const pendingOperations = JSON.parse(localStorage.getItem('pendingSync') || '[]');
+      if (pendingOperations.length === 0) return;
+      
+      console.log(`Processando ${pendingOperations.length} operações pendentes...`);
+      
+      const successfulOps = [];
+      
+      for (const op of pendingOperations) {
+        try {
+          if (op.operation === 'insert') {
+            const { error } = await supabase
+              .from('visitors')
+              .insert([{
+                id: op.data.id,
+                name: op.data.name,
+                phone: op.data.phone,
+                isFirstTime: op.data.isFirstTime,
+                date: op.data.date
+              }]);
+            
+            if (!error) {
+              successfulOps.push(op);
+            }
+          } else if (op.operation === 'delete') {
+            const { error } = await supabase
+              .from('visitors')
+              .delete()
+              .eq('id', op.id);
+            
+            if (!error) {
+              successfulOps.push(op);
+            }
+          }
+        } catch (opError) {
+          console.error(`Erro ao processar operação pendente:`, opError);
+        }
+      }
+      
+      // Remover operações bem-sucedidas da lista de pendentes
+      if (successfulOps.length > 0) {
+        const remainingOps = pendingOperations.filter(op => 
+          !successfulOps.some(sop => 
+            sop.operation === op.operation && 
+            ((op.operation === 'insert' && sop.data.id === op.data.id) || 
+             (op.operation === 'delete' && sop.id === op.id))
+          )
+        );
+        
+        localStorage.setItem('pendingSync', JSON.stringify(remainingOps));
+        console.log(`${successfulOps.length} operações sincronizadas com sucesso.`);
+      }
+    } catch (error) {
+      console.error("Erro ao processar operações pendentes:", error);
     }
   },
   
@@ -186,15 +268,42 @@ const DataManager = {
     // Remove do Supabase em segundo plano
     if (isSupabaseAvailable && navigator.onLine) {
       try {
+        // Verificar conexão primeiro
+        const { data: connectionTest, error: connectionError } = await supabase
+          .from('visitors')
+          .select('count')
+          .limit(1);
+        
+        if (connectionError) {
+          console.warn('Problema de conexão com Supabase:', connectionError);
+          // Adicionar à fila de operações pendentes
+          localStorage.setItem('pendingSync', JSON.stringify([
+            ...(JSON.parse(localStorage.getItem('pendingSync') || '[]')),
+            { operation: 'delete', id }
+          ]));
+          return;
+        }
+        
         const { error } = await supabase
           .from('visitors')
           .delete()
           .eq('id', id);
         
-        if (error) throw error;
+        if (error) {
+          console.error("Erro ao remover visitante do Supabase:", error);
+          // Adicionar à fila de operações pendentes
+          localStorage.setItem('pendingSync', JSON.stringify([
+            ...(JSON.parse(localStorage.getItem('pendingSync') || '[]')),
+            { operation: 'delete', id }
+          ]));
+        }
       } catch (error) {
         console.error("Erro ao remover visitante do Supabase:", error);
-        // Poderíamos implementar uma fila de operações pendentes para sincronizar depois
+        // Adicionar à fila de operações pendentes
+        localStorage.setItem('pendingSync', JSON.stringify([
+          ...(JSON.parse(localStorage.getItem('pendingSync') || '[]')),
+          { operation: 'delete', id }
+        ]));
       }
     }
   },
@@ -498,12 +607,37 @@ const UIManager = {
 // Inicialização com tratamento de erros
 async function init() {
   try {
+    // Verificar e carregar Supabase se necessário
+    if (!window.supabase && supabaseUrl && supabaseKey) {
+      await loadSupabase();
+    }
+    
     UIManager.setupEventListeners();
     await DataManager.load();
   } catch (error) {
     console.error('Erro ao inicializar aplicação:', error);
     alert('Ocorreu um erro ao inicializar. Por favor, recarregue a página.');
   }
+}
+
+// Função para carregar Supabase dinamicamente
+function loadSupabase() {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+    script.onload = () => {
+      if (window.supabase) {
+        // Reinicializar client
+        const supabaseInstance = window.supabase.createClient(supabaseUrl, supabaseKey);
+        isSupabaseAvailable = true;
+        resolve(supabaseInstance);
+      } else {
+        reject(new Error('Não foi possível carregar a biblioteca Supabase'));
+      }
+    };
+    script.onerror = () => reject(new Error('Falha ao carregar Supabase'));
+    document.body.appendChild(script);
+  });
 }
 
 // Iniciar aplicação
