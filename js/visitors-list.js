@@ -33,6 +33,7 @@ const DOM = {
   totalVisitorsCount: document.getElementById('totalVisitorsCount'),
   firstTimeVisitorsCount: document.getElementById('firstTimeVisitorsCount'),
   downloadBtn: document.getElementById('downloadBtn'),
+  downloadPresentationBtn: document.getElementById('downloadPresentationBtn'), // Novo botão para versão de apresentação
   prevPageBtn: document.getElementById('prevPageBtn'),
   nextPageBtn: document.getElementById('nextPageBtn'),
   pageInfo: document.getElementById('pageInfo')
@@ -422,7 +423,7 @@ const DataManager = {
   },
   
   // Exportação para PDF com carregamento dinâmico de dependência
-  exportToPDF() {
+  exportToPDF(presentationMode = false) {
     if (filteredVisitors.length === 0) {
       alert('Não há visitantes para exportar.');
       return;
@@ -433,78 +434,143 @@ const DataManager = {
       const { jsPDF } = jspdf;
       const doc = new jsPDF();
       
-      // Título
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(16);
-      doc.text('Lista de Visitantes - Igreja Evangélica Internacional Semente Santa', 15, 15, {
-        maxWidth: 180
-      });
-      
-      // Informações de filtro e estatísticas
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      let yPos = 30;
-      
-      if (filters.date) {
-        doc.text(`Data do Relatório: ${filters.date}`, 15, yPos);
+      if (presentationMode) {
+        // Versão de apresentação - apenas nome e data
+        // Título
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(18);
+        doc.text('Lista de Visitantes - Igreja Evangélica Internacional Semente Santa', 15, 15, {
+          maxWidth: 180
+        });
+        
+        // Informações de filtro simplificadas
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(12);
+        let yPos = 30;
+        
+        if (filters.date) {
+          doc.text(`Data: ${filters.date}`, 15, yPos);
+        } else {
+          doc.text('Todos os períodos', 15, yPos);
+        }
+        yPos += 15;
+        
+        // Cabeçalho da tabela simplificado
+        doc.setFont('helvetica', 'bold');
+        doc.text('Nome', 15, yPos);
+        doc.text('Data da Visita', 100, yPos);
+        yPos += 7;
+        
+        // Linha divisória
+        doc.setDrawColor(200, 200, 200);
+        doc.line(15, yPos - 3, 195, yPos - 3);
+        
+        // Conteúdo da tabela simplificado
+        doc.setFont('helvetica', 'normal');
+        
+        filteredVisitors.forEach(visitor => {
+          // Nova página se necessário
+          if (yPos > 270) {
+            doc.addPage();
+            yPos = 20;
+          }
+          
+          doc.text(visitor.name, 15, yPos);
+          doc.text(visitor.date, 100, yPos);
+          
+          yPos += 7;
+        });
+        
+        // Mensagem de agradecimento
+        yPos += 10;
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(14);
+        doc.text('Obrigado por visitar nossa Igreja! Volte sempre!', 105, yPos, {
+          align: 'center'
+        });
+        
+        // Nome do arquivo
+        let fileName = 'visitantes_apresentacao';
+        if (filters.date) fileName += `_${filters.date.replace(/\//g, '-')}`;
+        fileName += '.pdf';
+        
+        // Salva o PDF
+        doc.save(fileName);
       } else {
-        doc.text('Data do Relatório: Todos os períodos', 15, yPos);
-      }
-      yPos += 7;
-      
-      if (filters.name) {
-        doc.text(`Filtro de Nome: ${filters.name}`, 15, yPos);
+        // Versão original completa
+        // Título
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.text('Lista de Visitantes - Igreja Evangélica Internacional Semente Santa', 15, 15, {
+          maxWidth: 180
+        });
+        
+        // Informações de filtro e estatísticas
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        let yPos = 30;
+        
+        if (filters.date) {
+          doc.text(`Data do Relatório: ${filters.date}`, 15, yPos);
+        } else {
+          doc.text('Data do Relatório: Todos os períodos', 15, yPos);
+        }
         yPos += 7;
-      }
-      
-      if (filters.firstTimeOnly) {
-        doc.text('Filtro: Apenas visitantes de primeira vez', 15, yPos);
-        yPos += 7;
-      }
-      
-      // Estatísticas
-      doc.text(`Total de Visitantes: ${filteredVisitors.length}`, 15, yPos);
-      yPos += 7;
-      doc.text(`Visitantes pela primeira vez: ${filteredVisitors.filter(v => v.isFirstTime).length}`, 15, yPos);
-      yPos += 15;
-      
-      // Cabeçalho da tabela
-      doc.setFont('helvetica', 'bold');
-      doc.text('Nome', 15, yPos);
-      doc.text('Telefone', 85, yPos);
-      doc.text('Data', 135, yPos);
-      doc.text('Primeira Vez', 165, yPos);
-      yPos += 7;
-      
-      // Linha divisória
-      doc.setDrawColor(200, 200, 200);
-      doc.line(15, yPos - 3, 195, yPos - 3);
-      
-      // Conteúdo da tabela
-      doc.setFont('helvetica', 'normal');
-      
-      filteredVisitors.forEach(visitor => {
-        // Nova página se necessário
-        if (yPos > 270) {
-          doc.addPage();
-          yPos = 20;
+        
+        if (filters.name) {
+          doc.text(`Filtro de Nome: ${filters.name}`, 15, yPos);
+          yPos += 7;
         }
         
-        doc.text(visitor.name.substring(0, 30), 15, yPos);
-        doc.text(visitor.phone, 85, yPos);
-        doc.text(visitor.date, 135, yPos);
-        doc.text(visitor.isFirstTime ? 'Sim' : 'Não', 165, yPos);
+        if (filters.firstTimeOnly) {
+          doc.text('Filtro: Apenas visitantes de primeira vez', 15, yPos);
+          yPos += 7;
+        }
         
+        // Estatísticas
+        doc.text(`Total de Visitantes: ${filteredVisitors.length}`, 15, yPos);
         yPos += 7;
-      });
-      
-      // Nome do arquivo baseado nos filtros
-      let fileName = 'visitantes';
-      if (filters.date) fileName += `_${filters.date.replace(/\//g, '-')}`;
-      fileName += '.pdf';
-      
-      // Salva o PDF
-      doc.save(fileName);
+        doc.text(`Visitantes pela primeira vez: ${filteredVisitors.filter(v => v.isFirstTime).length}`, 15, yPos);
+        yPos += 15;
+        
+        // Cabeçalho da tabela
+        doc.setFont('helvetica', 'bold');
+        doc.text('Nome', 15, yPos);
+        doc.text('Telefone', 85, yPos);
+        doc.text('Data', 135, yPos);
+        doc.text('Primeira Vez', 165, yPos);
+        yPos += 7;
+        
+        // Linha divisória
+        doc.setDrawColor(200, 200, 200);
+        doc.line(15, yPos - 3, 195, yPos - 3);
+        
+        // Conteúdo da tabela
+        doc.setFont('helvetica', 'normal');
+        
+        filteredVisitors.forEach(visitor => {
+          // Nova página se necessário
+          if (yPos > 270) {
+            doc.addPage();
+            yPos = 20;
+          }
+          
+          doc.text(visitor.name.substring(0, 30), 15, yPos);
+          doc.text(visitor.phone, 85, yPos);
+          doc.text(visitor.date, 135, yPos);
+          doc.text(visitor.isFirstTime ? 'Sim' : 'Não', 165, yPos);
+          
+          yPos += 7;
+        });
+        
+        // Nome do arquivo baseado nos filtros
+        let fileName = 'visitantes';
+        if (filters.date) fileName += `_${filters.date.replace(/\//g, '-')}`;
+        fileName += '.pdf';
+        
+        // Salva o PDF
+        doc.save(fileName);
+      }
     }).catch(error => {
       console.error('Erro ao gerar PDF:', error);
       alert('Não foi possível gerar o PDF. Verifique sua conexão.');
@@ -558,17 +624,10 @@ const UIManager = {
       DataManager.processVisitors();
     });
     
-    // Filtro de nome com debounce para melhor performance
-    let searchTimeout;
-    DOM.nameFilter.addEventListener('input', (e) => {
-      clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(() => {
-        filters.name = e.target.value.trim();
-        DataManager.processVisitors();
-      }, 300);
-    });
+    // Remover evento de input automático para o filtro de nome
+    // Agora a pesquisa só ocorre ao clicar no botão de pesquisa
     
-    // Botão de pesquisa (ainda útil para mobile)
+    // Botão de pesquisa
     DOM.searchBtn.addEventListener('click', () => {
       filters.name = DOM.nameFilter.value.trim();
       DataManager.processVisitors();
@@ -592,8 +651,13 @@ const UIManager = {
     DOM.prevPageBtn.addEventListener('click', () => DataManager.changePage(-1));
     DOM.nextPageBtn.addEventListener('click', () => DataManager.changePage(1));
     
-    // Download
-    DOM.downloadBtn.addEventListener('click', () => DataManager.exportToPDF());
+    // Download - versão completa
+    DOM.downloadBtn.addEventListener('click', () => DataManager.exportToPDF(false));
+    
+    // Download - versão de apresentação (botão adicional)
+    if (DOM.downloadPresentationBtn) {
+      DOM.downloadPresentationBtn.addEventListener('click', () => DataManager.exportToPDF(true));
+    }
     
     // Fechar dropdowns ao clicar fora - delegação global
     document.addEventListener('click', (e) => {
@@ -610,6 +674,44 @@ async function init() {
     // Verificar e carregar Supabase se necessário
     if (!window.supabase && supabaseUrl && supabaseKey) {
       await loadSupabase();
+    }
+    
+    // Se o botão de download de apresentação não existir, crie-o
+    if (!DOM.downloadPresentationBtn) {
+      const downloadBtn = document.getElementById('downloadBtn');
+      if (downloadBtn && downloadBtn.parentElement) {
+        const presentationBtn = document.createElement('button');
+        presentationBtn.id = 'downloadPresentationBtn';
+        presentationBtn.className = downloadBtn.className; // Mesmas classes CSS do botão original
+        presentationBtn.innerHTML = '<i class="fas fa-file-pdf"></i> Versão de Apresentação';
+        
+        // Inserir após o botão de download
+        downloadBtn.parentElement.insertBefore(presentationBtn, downloadBtn.nextSibling);
+        
+        // Atualizar a referência no DOM
+        DOM.downloadPresentationBtn = presentationBtn;
+      }
+    }
+    
+    // Reposicionar o botão de pesquisa para ficar ao lado da caixa de pesquisa
+    const searchBtn = DOM.searchBtn;
+    const nameFilter = DOM.nameFilter;
+    
+    if (searchBtn && nameFilter && nameFilter.parentElement) {
+      // Criar um div container para envolver os elementos
+      const searchContainer = document.createElement('div');
+      searchContainer.className = 'search-container';
+      searchContainer.style.display = 'flex';
+      searchContainer.style.alignItems = 'center';
+      
+      // Ajustar estilos do campo de pesquisa
+      nameFilter.style.marginRight = '5px';
+      nameFilter.style.flexGrow = '1';
+      
+      // Mover o botão de pesquisa para depois do campo de texto
+      nameFilter.parentElement.insertBefore(searchContainer, nameFilter);
+      searchContainer.appendChild(nameFilter);
+      searchContainer.appendChild(searchBtn);
     }
     
     UIManager.setupEventListeners();
