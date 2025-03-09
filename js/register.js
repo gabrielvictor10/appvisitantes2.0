@@ -286,3 +286,4 @@ const AppState = {
   
   // Iniciar quando DOM estiver carregado
   document.addEventListener('DOMContentLoaded', init);
+  
