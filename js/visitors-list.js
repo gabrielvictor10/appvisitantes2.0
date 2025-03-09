@@ -38,64 +38,64 @@ const DOM = {
 
 // Utilitários de data consolidados
 const DateUtils = {
-    // Converte para formato brasileiro (dd/mm/yyyy)
-    formatToBR(dateString) {
-      if (!dateString) return '';
-      
-      // Se já estiver no formato brasileiro, retorna o próprio
-      if (dateString.includes('/')) return dateString;
-      
-      // Converte formato ISO para formato brasileiro
-      const [year, month, day] = dateString.split('-');
-      return `${day}/${month}/${year}`;
-    },
+  // Converte para formato brasileiro (dd/mm/yyyy)
+  formatToBR(dateString) {
+    if (!dateString) return '';
     
-    // Converte formato brasileiro para ISO
-    formatToISO(dateString) {
-      if (!dateString) return '';
-      
-      const [day, month, year] = dateString.split('/');
-      return `${year}-${month}-${day}`;
-    },
+    // Se já estiver no formato brasileiro, retorna o próprio
+    if (dateString.includes('/')) return dateString;
     
-    // Verifica se duas datas são iguais (no formato dd/mm/yyyy)
-    areDatesEqual(date1, date2) {
-      if (!date1 || !date2) return false;
-      return date1 === date2;
-    },
-    
-    // Cria objeto Date a partir de string brasileira
-    createDateFromBR(brDate) {
-      if (!brDate) return null;
-      
-      const [day, month, year] = brDate.split('/');
-      return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-    }
-  };
+    // Converte formato ISO para formato brasileiro
+    const [year, month, day] = dateString.split('-');
+    return `${day}/${month}/${year}`;
+  },
   
-  // Gerenciamento de dados otimizado
-  const DataManager = {
-    // Carrega dados com fallback e sincronização inteligente
-    async load() {
-      try {
-        // Carrega visitantes do localStorage primeiro para UI responsiva imediata
-        const storedVisitors = localStorage.getItem('churchVisitors');
-        visitors = storedVisitors ? JSON.parse(storedVisitors) : [];
-        
-        // Processa os dados iniciais para UI imediata
-        this.processVisitors();
-        
-        // Tenta carregar do Supabase em segundo plano se disponível
-        if (isSupabaseAvailable && navigator.onLine) {
-          await this.syncWithSupabase();
-          // Inicializa escuta em tempo real
-          this.initializeRealtime();
-        }
-      } catch (error) {
-        console.error("Erro ao carregar visitantes:", error);
-        // Continua com os dados do localStorage em caso de falha
+  // Converte formato brasileiro para ISO
+  formatToISO(dateString) {
+    if (!dateString) return '';
+    
+    const [day, month, year] = dateString.split('/');
+    return `${year}-${month}-${day}`;
+  },
+  
+  // Verifica se duas datas são iguais (no formato dd/mm/yyyy)
+  areDatesEqual(date1, date2) {
+    if (!date1 || !date2) return false;
+    return date1 === date2;
+  },
+  
+  // Cria objeto Date a partir de string brasileira
+  createDateFromBR(brDate) {
+    if (!brDate) return null;
+    
+    const [day, month, year] = brDate.split('/');
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  }
+};
+
+// Gerenciamento de dados otimizado
+const DataManager = {
+  // Carrega dados com fallback e sincronização inteligente
+  async load() {
+    try {
+      // Carrega visitantes do localStorage primeiro para UI responsiva imediata
+      const storedVisitors = localStorage.getItem('churchVisitors');
+      visitors = storedVisitors ? JSON.parse(storedVisitors) : [];
+      
+      // Processa os dados iniciais para UI imediata
+      this.processVisitors();
+      
+      // Tenta carregar do Supabase em segundo plano se disponível
+      if (isSupabaseAvailable && navigator.onLine) {
+        await this.syncWithSupabase();
+        // Inicializa escuta em tempo real
+        this.initializeRealtime();
       }
-    },
+    } catch (error) {
+      console.error("Erro ao carregar visitantes:", error);
+      // Continua com os dados do localStorage em caso de falha
+    }
+  },
   
   // Sincronizar dados com Supabase de forma eficiente
   async syncWithSupabase(retryCount = 0) {
