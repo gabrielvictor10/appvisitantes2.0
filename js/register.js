@@ -10,7 +10,8 @@ const DOM = {
   firstTimeCheckbox: document.getElementById('firstTimeCheckbox'),
   addVisitorBtn: document.getElementById('addVisitorBtn'),
   todayVisitorsCount: document.getElementById('todayVisitorsCount'),
-  todayFirstTimeCount: document.getElementById('todayFirstTimeCount')
+  todayFirstTimeCount: document.getElementById('todayFirstTimeCount'),
+  connectionStatus: document.createElement('div') // Elemento para status de conexão
 };
 
 // Utilitários de data simplificados
@@ -39,26 +40,74 @@ const DateUtils = {
   }
 };
 
-// Gerenciamento Supabase com melhor tratamento de falhas
+// Gerenciamento Supabase melhorado
 let supabaseClient = null;
+let connectionCheckInterval = null;
 
 // Gerenciamento de dados otimizado
 const DataManager = {
-  // Inicializa Supabase com retry automático
+  // Melhorado com verificação de disponibilidade
   initSupabase() {
-    if (!window.supabase) return null;
+    if (!window.supabase) {
+      console.warn('Biblioteca Supabase não encontrada.');
+      return null;
+    }
+    
     try {
       const SUPABASE_URL = 'https://qdttsbnsijllhkgrpdmc.supabase.co';
       const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkdHRzYm5zaWpsbGhrZ3JwZG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExOTQzNDgsImV4cCI6MjA1Njc3MDM0OH0.CuZdeCC2wK73CrTt2cMIKxj20hAtgz_8qAhFt1EKkCw';
+      
       supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      
+      // Verificar conexão imediatamente
+      this.checkConnection();
+      
+      // Monitoramento de conexão a cada 30 segundos
+      if (connectionCheckInterval) clearInterval(connectionCheckInterval);
+      connectionCheckInterval = setInterval(() => this.checkConnection(), 30000);
+      
       return supabaseClient;
     } catch (error) {
       console.error('Erro ao inicializar Supabase:', error);
       return null;
     }
   },
+  
+  // Nova função para verificar conexão
+  async checkConnection() {
+    if (!supabaseClient) return false;
+    
+    try {
+      const { error } = await supabaseClient.from('visitors').select('count', { count: 'exact', head: true });
+      
+      const isConnected = !error;
+      this.updateConnectionStatus(isConnected);
+      
+      if (isConnected && this.getPendingQueue().length > 0) {
+        console.log('Conexão verificada, processando fila pendente...');
+        this.processPendingQueue();
+      }
+      
+      return isConnected;
+    } catch (error) {
+      console.error('Erro ao verificar conexão:', error);
+      this.updateConnectionStatus(false);
+      return false;
+    }
+  },
+  
+  // Nova função para mostrar status da conexão
+  updateConnectionStatus(isConnected) {
+    const statusElement = document.getElementById('connectionStatus');
+    if (statusElement) {
+      statusElement.textContent = isConnected 
+        ? 'Conectado ao banco de dados' 
+        : 'Modo offline (salvando localmente)';
+      statusElement.style.color = isConnected ? '#2ecc71' : '#e74c3c';
+    }
+  },
 
-  // Carrega dados com implementação assíncrona e fallback
+  // Carrega dados com implementação assíncrona melhorada
   async load() {
     try {
       // Carrega do localStorage primeiro para UI imediata
@@ -66,18 +115,45 @@ const DataManager = {
       AppState.visitors = storedVisitors ? JSON.parse(storedVisitors) : [];
       this.updateStats();
       
-      // Tenta inicializar Supabase em background
+      // Adiciona indicador de status se não existir
+      const containerElement = document.querySelector('.container');
+      if (containerElement && !document.getElementById('connectionStatus')) {
+        const statusElement = document.createElement('div');
+        statusElement.id = 'connectionStatus';
+        statusElement.style.textAlign = 'center';
+        statusElement.style.padding = '5px';
+        statusElement.style.marginBottom = '10px';
+        statusElement.style.borderRadius = '4px';
+        statusElement.style.backgroundColor = '#f8f9fa';
+        containerElement.prepend(statusElement);
+      }
+      
+      // Tenta inicializar Supabase
       if (!supabaseClient) {
         supabaseClient = this.initSupabase();
       }
       
-      // Se Supabase disponível, sincroniza
-      if (supabaseClient && navigator.onLine) {
-        this.syncWithSupabase();
+      // Configura ouvintes de conexão
+      window.addEventListener('online', () => {
+        console.log('Conexão de rede restabelecida');
+        this.checkConnection();
+      });
+      
+      window.addEventListener('offline', () => {
+        console.log('Conexão de rede perdida');
+        this.updateConnectionStatus(false);
+      });
+      
+      // Verifica se há visitantes pendentes e processa
+      const hasPendingData = this.getPendingQueue().length > 0;
+      if (hasPendingData && navigator.onLine) {
+        await this.processPendingQueue();
       }
       
-      // Configura ouvinte para reconexão
-      window.addEventListener('online', () => this.syncWithSupabase());
+      // Sincroniza com o banco se online
+      if (navigator.onLine) {
+        await this.syncWithSupabase();
+      }
       
       return true;
     } catch (error) {
@@ -86,14 +162,24 @@ const DataManager = {
     }
   },
   
-  // Sincronização com Supabase com retry e queue
+  // Sincronização com Supabase melhorada
   async syncWithSupabase() {
-    if (!supabaseClient || !navigator.onLine) return;
+    if (!supabaseClient || !navigator.onLine) {
+      this.updateConnectionStatus(false);
+      return false;
+    }
     
     try {
+      const isConnected = await this.checkConnection();
+      if (!isConnected) return false;
+      
       const { data, error } = await supabaseClient.from('visitors').select('*');
       
-      if (error) throw error;
+      if (error) {
+        console.error('Erro ao buscar dados:', error);
+        this.updateConnectionStatus(false);
+        return false;
+      }
       
       if (data && data.length > 0) {
         // Mesclagem eficiente de dados
@@ -108,13 +194,18 @@ const DataManager = {
       }
       
       // Processa fila de pendências
-      this.processPendingQueue();
+      await this.processPendingQueue();
+      
+      this.updateConnectionStatus(true);
+      return true;
     } catch (error) {
       console.error('Erro na sincronização com Supabase:', error);
+      this.updateConnectionStatus(false);
+      return false;
     }
   },
   
-  // Fila de operações pendentes para retry
+  // Fila de operações pendentes melhorada
   getPendingQueue() {
     const queue = localStorage.getItem('pendingVisitors');
     return queue ? JSON.parse(queue) : [];
@@ -122,37 +213,110 @@ const DataManager = {
   
   addToPendingQueue(visitor) {
     const pendingQueue = this.getPendingQueue();
-    pendingQueue.push(visitor);
-    localStorage.setItem('pendingVisitors', JSON.stringify(pendingQueue));
+    
+    // Evita duplicados na fila
+    const exists = pendingQueue.some(v => v.id === visitor.id);
+    if (!exists) {
+      pendingQueue.push(visitor);
+      localStorage.setItem('pendingVisitors', JSON.stringify(pendingQueue));
+      console.log(`Visitante ${visitor.name} adicionado à fila pendente.`);
+    }
   },
   
   async processPendingQueue() {
-    if (!supabaseClient || !navigator.onLine) return;
+    if (!supabaseClient || !navigator.onLine) {
+      this.updateConnectionStatus(false);
+      return false;
+    }
+    
+    const isConnected = await this.checkConnection();
+    if (!isConnected) return false;
     
     const pendingQueue = this.getPendingQueue();
-    if (pendingQueue.length === 0) return;
+    if (pendingQueue.length === 0) return true;
+    
+    console.log(`Processando ${pendingQueue.length} visitantes pendentes...`);
     
     const successItems = [];
+    const failedItems = [];
     
     for (const visitor of pendingQueue) {
       try {
-        const { error } = await supabaseClient.from('visitors').insert([visitor]);
-        if (!error) successItems.push(visitor);
+        // Verifica se o visitante já existe no banco
+        const { data: existingData } = await supabaseClient
+          .from('visitors')
+          .select('id')
+          .eq('id', visitor.id)
+          .maybeSingle();
+          
+        if (existingData) {
+          // Se já existe, considera como sucesso
+          console.log(`Visitante ${visitor.name} já existe no banco.`);
+          successItems.push(visitor);
+          continue;
+        }
+          
+        // Tenta inserir com retry
+        let success = false;
+        let attempts = 0;
+        const maxAttempts = 3;
+        
+        while (!success && attempts < maxAttempts) {
+          attempts++;
+          
+          try {
+            const { error } = await supabaseClient.from('visitors').insert([visitor]);
+            
+            if (error) {
+              console.warn(`Tentativa ${attempts}: Erro ao inserir visitante ${visitor.name}:`, error);
+              
+              // Espera antes de tentar novamente (backoff exponencial)
+              await new Promise(r => setTimeout(r, 1000 * attempts));
+            } else {
+              success = true;
+              successItems.push(visitor);
+              console.log(`Visitante ${visitor.name} sincronizado com sucesso.`);
+            }
+          } catch (insertError) {
+            console.error(`Tentativa ${attempts}: Exceção ao inserir visitante:`, insertError);
+            
+            // Espera antes de tentar novamente
+            await new Promise(r => setTimeout(r, 1000 * attempts));
+          }
+        }
+        
+        if (!success) {
+          failedItems.push(visitor);
+        }
       } catch (err) {
-        console.warn('Falha ao sincronizar item pendente:', err);
+        console.warn('Falha ao processar item pendente:', err);
+        failedItems.push(visitor);
       }
     }
     
-    // Remove itens sincronizados da fila
-    if (successItems.length > 0) {
-      const newQueue = pendingQueue.filter(v => !successItems.some(s => s.id === v.id));
+    // Atualiza a fila pendente
+    if (successItems.length > 0 || failedItems.length > 0) {
+      const newQueue = pendingQueue.filter(v => 
+        !successItems.some(s => s.id === v.id)
+      );
+      
       localStorage.setItem('pendingVisitors', JSON.stringify(newQueue));
+      console.log(`Processamento concluído: ${successItems.length} sucesso, ${failedItems.length} falhas.`);
     }
+    
+    this.updateConnectionStatus(true);
+    return successItems.length > 0;
   },
   
-  // Adiciona visitante com fallback offline
+  // Adiciona visitante com melhor tratamento de erros
   async addVisitor(visitorData) {
     try {
+      // Valida dados antes de inserir
+      if (!visitorData.name || !visitorData.date) {
+        console.error('Dados de visitante inválidos:', visitorData);
+        return false;
+      }
+      
       // Adiciona ID se não existir
       if (!visitorData.id) {
         visitorData.id = Date.now();
@@ -163,25 +327,37 @@ const DataManager = {
       localStorage.setItem('churchVisitors', JSON.stringify(AppState.visitors));
       this.updateStats();
       
-      // Tenta adicionar ao Supabase ou coloca na fila
+      // Verifica status da conexão
+      const isConnected = await this.checkConnection();
       let added = false;
-      if (supabaseClient && navigator.onLine) {
-        try {
-          const { error } = await supabaseClient.from('visitors').insert([visitorData]);
-          added = !error;
-        } catch (e) {
-          added = false;
-        }
-      }
       
-      // Se não conseguiu adicionar, coloca na fila de pendências
-      if (!added) {
+      if (isConnected) {
+        try {
+          // Tenta inserir diretamente
+          const { error } = await supabaseClient.from('visitors').insert([visitorData]);
+          
+          if (error) {
+            console.warn('Erro ao inserir visitante no Supabase:', error);
+            // Adiciona à fila para tentar mais tarde
+            this.addToPendingQueue(visitorData);
+          } else {
+            added = true;
+            console.log('Visitante adicionado com sucesso ao Supabase.');
+          }
+        } catch (e) {
+          console.error('Exceção ao inserir visitante no Supabase:', e);
+          this.addToPendingQueue(visitorData);
+        }
+      } else {
+        // Se desconectado, adiciona à fila
         this.addToPendingQueue(visitorData);
       }
       
       return true;
     } catch (error) {
       console.error('Erro ao adicionar visitante:', error);
+      // Mesmo com erro, adiciona à fila para não perder dados
+      this.addToPendingQueue(visitorData);
       return false;
     }
   },
@@ -206,6 +382,15 @@ const UIManager = {
     
     // Configura eventos
     this.setupEventListeners();
+    
+    // Configura estado inicial dos botões
+    this.updateButtonStates();
+  },
+  
+  updateButtonStates() {
+    // Desabilita o botão de adicionar se não houver nome
+    const nameValue = DOM.nameInput.value.trim();
+    DOM.addVisitorBtn.disabled = nameValue === '';
   },
   
   setupEventListeners() {
@@ -222,7 +407,12 @@ const UIManager = {
       DataManager.updateStats();
     });
     
-    // Adicionar visitante
+    // Validação em tempo real
+    DOM.nameInput.addEventListener('input', () => {
+      this.updateButtonStates();
+    });
+    
+    // Adicionar visitante com feedback melhorado
     DOM.addVisitorBtn.addEventListener('click', async () => {
       const name = DOM.nameInput.value.trim();
       const phone = DOM.phoneInput.value.trim();
@@ -233,6 +423,10 @@ const UIManager = {
         return;
       }
       
+      // Desabilita o botão durante o processamento
+      DOM.addVisitorBtn.disabled = true;
+      DOM.addVisitorBtn.textContent = 'Processando...';
+      
       const visitorData = {
         id: Date.now(),
         name,
@@ -241,23 +435,42 @@ const UIManager = {
         date: DateUtils.formatToBR(AppState.selectedDate)
       };
       
-      const success = await DataManager.addVisitor(visitorData);
-      
-      if (success) {
-        DOM.nameInput.value = '';
-        DOM.phoneInput.value = '';
-        DOM.firstTimeCheckbox.checked = false;
-        alert('Visitante registrado com sucesso!' + (navigator.onLine ? '' : ' (Modo offline - será sincronizado quando houver conexão)'));
-        DOM.nameInput.focus();
-      } else {
-        alert('Erro ao registrar visitante. Os dados foram salvos localmente e serão sincronizados mais tarde.');
+      try {
+        const success = await DataManager.addVisitor(visitorData);
+        
+        if (success) {
+          DOM.nameInput.value = '';
+          DOM.phoneInput.value = '';
+          DOM.firstTimeCheckbox.checked = false;
+          
+          const isOnline = navigator.onLine && await DataManager.checkConnection();
+          alert(`Visitante "${name}" registrado com sucesso!` + 
+                (isOnline ? '' : ' (Modo offline - será sincronizado quando houver conexão)'));
+          DOM.nameInput.focus();
+        } else {
+          alert('Erro ao registrar visitante. Os dados foram salvos localmente e serão sincronizados mais tarde.');
+        }
+      } catch (error) {
+        console.error('Erro ao processar adição de visitante:', error);
+        alert('Ocorreu um erro, mas os dados foram salvos localmente.');
+      } finally {
+        // Restaura o botão
+        DOM.addVisitorBtn.disabled = false;
+        DOM.addVisitorBtn.textContent = 'Adicionar Visitante';
+        this.updateButtonStates();
       }
     });
     
     // Enter para enviar
-    DOM.phoneInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') DOM.addVisitorBtn.click();
-    });
+    const submitOnEnter = (e) => {
+      if (e.key === 'Enter' && !DOM.addVisitorBtn.disabled) {
+        e.preventDefault();
+        DOM.addVisitorBtn.click();
+      }
+    };
+    
+    DOM.nameInput.addEventListener('keypress', submitOnEnter);
+    DOM.phoneInput.addEventListener('keypress', submitOnEnter);
     
     // Fechar dropdown ao clicar fora
     document.addEventListener('click', (e) => {
@@ -269,23 +482,38 @@ const UIManager = {
     // Verificação de status de conexão
     window.addEventListener('online', () => {
       console.log('Conexão restabelecida, sincronizando dados...');
-      DataManager.syncWithSupabase();
+      DataManager.checkConnection();
+    });
+    
+    // Sincronização manual com F5
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'F5') {
+        e.preventDefault();
+        DataManager.syncWithSupabase();
+      }
     });
   }
 };
 
-// Inicialização
-document.addEventListener('DOMContentLoaded', async () => {
+// Inicialização com retry
+(async function initialize() {
   try {
     UIManager.init();
-    await DataManager.load();
+    const loaded = await DataManager.load();
     
-    // Tenta sincronizar a cada 5 minutos
+    if (!loaded) {
+      console.warn('Falha na inicialização inicial, tentando novamente...');
+      setTimeout(initialize, 3000);
+      return;
+    }
+    
+    // Tenta sincronizar a cada 3 minutos
     setInterval(() => {
       if (navigator.onLine) DataManager.syncWithSupabase();
-    }, 300000);
+    }, 180000);
+    
   } catch (error) {
-    console.error('Erro ao inicializar:', error);
-    alert('Ocorreu um erro ao inicializar. A aplicação continuará funcionando no modo offline.');
+    console.error('Erro na inicialização:', error);
+    setTimeout(initialize, 3000);
   }
-});
+})();
