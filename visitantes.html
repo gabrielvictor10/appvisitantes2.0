@@ -26,11 +26,11 @@
             <div class="search-filters">
                 <!-- Filtro de Data -->
                 <div class="filter-group">
-                    <label for="dateFilter">Data:</label>
+                    <label for="dateFilter">Data da visita:</label>
                     <div class="date-picker">
                         <button id="dateFilterBtn" class="button button-outline">
                             <span class="icon">📅</span>
-                            <span id="selectedFilterDate">Todos</span>
+                            <span id="selectedFilterDate">Todas as datas</span>
                         </button>
                         <div id="dateFilterDropdown" class="date-dropdown" style="display: none;">
                             <input type="date" id="dateFilterInput" class="date-input">
@@ -41,10 +41,10 @@
                 
                 <!-- Pesquisa por Nome -->
                 <div class="filter-group">
-                    <label for="nameFilter">Nome:</label>
+                    <label for="nameFilter">Busca:</label>
                     <div class="search-container">
-                        <input type="text" id="nameFilter" placeholder="Buscar por nome..." class="input-field">
-                        <button id="searchBtn" class="button button-outline">Pesquisar</button>
+                        <input type="text" id="nameFilter" placeholder="Buscar por..." class="input-field">
+                        <button id="searchBtn" class="button button-outline">Buscar</button>
                     </div>
                 </div>
                 
@@ -64,7 +64,7 @@
             <!-- Botão de Download -->
             <button id="downloadBtn" class="button">
                 <span class="icon">📥</span>
-                <span>Baixar Lista Filtrada</span>
+                <span>Baixar lista com todos os dados</span>
             </button>
             
             <!-- Lista de Visitantes -->

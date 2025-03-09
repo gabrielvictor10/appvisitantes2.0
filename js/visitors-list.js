@@ -609,7 +609,7 @@ const UIManager = {
         DOM.selectedFilterDate.textContent = filters.date;
       } else {
         filters.date = null;
-        DOM.selectedFilterDate.textContent = 'Todos';
+        DOM.selectedFilterDate.textContent = 'Todas as datas';
       }
       
       DOM.dateFilterDropdown.style.display = 'none';
@@ -618,7 +618,7 @@ const UIManager = {
     
     DOM.clearDateFilterBtn.addEventListener('click', () => {
       filters.date = null;
-      DOM.selectedFilterDate.textContent = 'Todos';
+      DOM.selectedFilterDate.textContent = 'Todas as datas';
       DOM.dateFilterInput.value = '';
       DOM.dateFilterDropdown.style.display = 'none';
       DataManager.processVisitors();
@@ -683,7 +683,7 @@ async function init() {
         const presentationBtn = document.createElement('button');
         presentationBtn.id = 'downloadPresentationBtn';
         presentationBtn.className = downloadBtn.className; // Mesmas classes CSS do botão original
-        presentationBtn.innerHTML = '<i class="fas fa-file-pdf"></i> Versão de Apresentação';
+        presentationBtn.innerHTML = '<i class="fas fa-file-pdf"></i><span class="icon">📥</span> Baixar lista de apresentação';
         
         // Inserir após o botão de download
         downloadBtn.parentElement.insertBefore(presentationBtn, downloadBtn.nextSibling);
