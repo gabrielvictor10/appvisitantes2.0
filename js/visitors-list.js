@@ -11,26 +11,11 @@ let pagination = {
   itemsPerPage: 10
 };
 
-// Inicialização do Supabase com melhor gerenciamento de conexão
-const SUPABASE_URL = 'https://qdttsbnsijllhkgrpdmc.supabase.co';
-// Não armazenar a chave diretamente no código em produção
-// Usar variáveis de ambiente ou um serviço de autenticação
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkdHRzYm5zaWpsbGhrZ3JwZG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExOTQzNDgsImV4cCI6MjA1Njc3MDM0OH0.CuZdeCC2wK73CrTt2cMIKxj20hAtgz_8qAhFt1EKkCw';
-
-// Função para criar cliente Supabase com retry
-const createSupabaseClient = () => {
-  if (!window.supabase) return null;
-  
-  try {
-    return window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  } catch (error) {
-    console.error('Erro ao inicializar Supabase:', error);
-    return null;
-  }
-};
-
-const supabase = createSupabaseClient();
-const isSupabaseAvailable = !!supabase;
+// Inicialização do Supabase com o método do arquivo "script.js"
+const supabaseUrl = 'https://qdttsbnsijllhkgrpdmc.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkdHRzYm5zaWpsbGhrZ3JwZG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExOTQzNDgsImV4cCI6MjA1Njc3MDM0OH0.CuZdeCC2wK73CrTt2cMIKxj20hAtgz_8qAhFt1EKkCw';
+const supabase = window.supabase ? window.supabase.createClient(supabaseUrl, supabaseKey) : null;
+const isSupabaseAvailable = !!window.supabase;
 
 // Cache de elementos DOM para melhor performance
 const DOM = {
@@ -50,6 +35,8 @@ const DOM = {
   nextPageBtn: document.getElementById('nextPageBtn'),
   pageInfo: document.getElementById('pageInfo')
 };
+
+// O restante do código permanece igual...
 
 // Utilitários de data consolidados
 const DateUtils = {

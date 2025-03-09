@@ -60,63 +60,11 @@ const AppState = {
     }
   };
   
-  // Gerenciamento de conexão Supabase (compartilhado com visitors-list.js)
-  const SupabaseManager = {
-    client: null,
-    
-    // Inicializa cliente Supabase se disponível
-    init() {
-      if (!window.supabase) return false;
-      
-      try {
-        const SUPABASE_URL = 'https://qdttsbnsijllhkgrpdmc.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkdHRzYm5zaWpsbGhrZ3JwZG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExOTQzNDgsImV4cCI6MjA1Njc3MDM0OH0.CuZdeCC2wK73CrTt2cMIKxj20hAtgz_8qAhFt1EKkCw';
-        
-        this.client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        return true;
-      } catch (error) {
-        console.error('Erro ao inicializar Supabase:', error);
-        return false;
-      }
-    },
-    
-    // Verifica disponibilidade do cliente
-    isAvailable() {
-      return !!this.client && navigator.onLine;
-    },
-    
-    // Carrega visitantes do Supabase
-    async loadVisitors() {
-      if (!this.isAvailable()) return null;
-      
-      try {
-        const { data, error } = await this.client.from('visitors').select('*');
-        
-        if (error) throw error;
-        return data || [];
-      } catch (error) {
-        console.error('Erro ao carregar visitantes do Supabase:', error);
-        return null;
-      }
-    },
-    
-    // Adiciona visitante ao Supabase
-    async addVisitor(visitor) {
-      if (!this.isAvailable()) return false;
-      
-      try {
-        const { data, error } = await this.client
-          .from('visitors')
-          .insert([visitor]);
-        
-        if (error) throw error;
-        return true;
-      } catch (error) {
-        console.error('Erro ao adicionar visitante ao Supabase:', error);
-        return false;
-      }
-    }
-  };
+  // Inicialização do Supabase (usando a mesma configuração do script.js)
+  const supabaseUrl = 'https://qdttsbnsijllhkgrpdmc.supabase.co';
+  const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkdHRzYm5zaWpsbGhrZ3JwZG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExOTQzNDgsImV4cCI6MjA1Njc3MDM0OH0.CuZdeCC2wK73CrTt2cMIKxj20hAtgz_8qAhFt1EKkCw';
+  const supabase = window.supabase ? window.supabase.createClient(supabaseUrl, supabaseKey) : null;
+  let supabaseEnabled = !!window.supabase;
   
   // Gerenciamento de dados otimizado
   const DataManager = {
@@ -127,29 +75,32 @@ const AppState = {
         const storedVisitors = localStorage.getItem('churchVisitors');
         AppState.visitors = storedVisitors ? JSON.parse(storedVisitors) : [];
         
-        // Inicializa Supabase se disponível
-        const supabaseAvailable = SupabaseManager.init();
-        
         // Sincroniza com Supabase em segundo plano se disponível
-        if (supabaseAvailable) {
-          const remoteVisitors = await SupabaseManager.loadVisitors();
-          
-          if (remoteVisitors && remoteVisitors.length > 0) {
-            // Usa Map para mesclagem eficiente de dados
-            const visitorMap = new Map(AppState.visitors.map(v => [v.id.toString(), v]));
+        if (supabaseEnabled && navigator.onLine) {
+          try {
+            const { data, error } = await supabase.from('visitors').select('*');
             
-            remoteVisitors.forEach(v => {
-              visitorMap.set(v.id.toString(), {
-                id: v.id,
-                name: v.name,
-                phone: v.phone,
-                isFirstTime: v.isFirstTime,
-                date: v.date
+            if (error) throw error;
+            
+            if (data && data.length > 0) {
+              // Usa Map para mesclagem eficiente de dados
+              const visitorMap = new Map(AppState.visitors.map(v => [v.id.toString(), v]));
+              
+              data.forEach(v => {
+                visitorMap.set(v.id.toString(), {
+                  id: v.id,
+                  name: v.name,
+                  phone: v.phone,
+                  isFirstTime: v.isFirstTime,
+                  date: v.date
+                });
               });
-            });
-            
-            AppState.visitors = Array.from(visitorMap.values());
-            localStorage.setItem('churchVisitors', JSON.stringify(AppState.visitors));
+              
+              AppState.visitors = Array.from(visitorMap.values());
+              localStorage.setItem('churchVisitors', JSON.stringify(AppState.visitors));
+            }
+          } catch (error) {
+            console.error('Erro ao sincronizar com Supabase:', error);
           }
         }
         
@@ -176,11 +127,16 @@ const AppState = {
         this.updateStats();
         
         // Tenta adicionar ao Supabase em segundo plano
-        if (SupabaseManager.isAvailable()) {
-          const success = await SupabaseManager.addVisitor(visitorData);
-          
-          if (!success) {
-            // Se falhar, poderia implementar uma fila de pendências para sincronizar depois
+        if (supabaseEnabled && navigator.onLine) {
+          try {
+            const { error } = await supabase
+              .from('visitors')
+              .insert([visitorData]);
+            
+            if (error) throw error;
+          } catch (error) {
+            console.error('Erro ao adicionar visitante ao Supabase:', error);
+            // Poderia implementar uma fila de pendências para sincronizar depois
             console.warn('Falha ao sincronizar com Supabase. O item será sincronizado na próxima conexão.');
           }
         }
@@ -330,4 +286,3 @@ const AppState = {
   
   // Iniciar quando DOM estiver carregado
   document.addEventListener('DOMContentLoaded', init);
-  
