@@ -60,9 +60,10 @@ const DateUtils = {
   }
 };
 
-// Inicialização do Supabase (usando a mesma configuração do script.js)
+// Configuração do Supabase
 const supabaseUrl = 'https://qdttsbnsijllhkgrpdmc.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkdHRzYm5zaWpsbGhrZ3JwZG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExOTQzNDgsImV4cCI6MjA1Njc3MDM0OH0.CuZdeCC2wK73CrTt2cMIKxj20hAtgz_8qAhFt1EKkCw';
+// Inicializar como null e definir mais tarde quando o script do Supabase estiver carregado
 let supabase = null;
 let supabaseEnabled = false;
 
@@ -70,9 +71,10 @@ let supabaseEnabled = false;
 function loadSupabase() {
   return new Promise((resolve, reject) => {
     if (window.supabase) {
+      // Se já estiver carregado, inicializar o cliente
       supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
       supabaseEnabled = true;
-      resolve(window.supabase);
+      resolve(supabase);
       return;
     }
     
@@ -80,9 +82,10 @@ function loadSupabase() {
     script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
     script.onload = () => {
       if (window.supabase) {
+        // Inicializar o cliente após carregar o script
         supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
         supabaseEnabled = true;
-        resolve(window.supabase);
+        resolve(supabase);
       } else {
         reject(new Error('Não foi possível carregar a biblioteca Supabase'));
       }
@@ -97,8 +100,12 @@ const DataManager = {
   // Carrega dados com implementação assíncrona
   async load() {
     try {
-      // Verifica e carrega Supabase se necessário
-      if (!supabase && supabaseUrl && supabaseKey) {
+      // Carregar dados do localStorage para UI responsiva imediata
+      const storedVisitors = localStorage.getItem('churchVisitors');
+      AppState.visitors = storedVisitors ? JSON.parse(storedVisitors) : [];
+      
+      // Verificar e carregar Supabase se necessário
+      if (!supabaseEnabled && supabaseUrl && supabaseKey) {
         try {
           await loadSupabase();
         } catch (e) {
@@ -106,13 +113,49 @@ const DataManager = {
         }
       }
       
-      // Carrega visitantes do localStorage primeiro para UI responsiva imediata
-      const storedVisitors = localStorage.getItem('churchVisitors');
-      AppState.visitors = storedVisitors ? JSON.parse(storedVisitors) : [];
-      
-      // Sincroniza com Supabase em segundo plano se disponível
+      // Sincroniza com Supabase se disponível e online
       if (supabaseEnabled && navigator.onLine) {
-        await this.syncWithSupabase();
+        try {
+          // Verificar conexão primeiro
+          const { data: connectionTest, error: connectionError } = await supabase
+            .from('visitors')
+            .select('count')
+            .limit(1);
+          
+          if (connectionError) {
+            console.warn('Problema de conexão com Supabase:', connectionError);
+            this.updateStats(); // Atualiza apenas com dados locais
+            return true;
+          }
+          
+          // Conexão OK, buscar dados
+          const { data, error } = await supabase.from('visitors').select('*');
+          
+          if (error) throw error;
+          
+          if (data && data.length > 0) {
+            // Usa Map para mesclagem eficiente de dados
+            const visitorMap = new Map(AppState.visitors.map(v => [v.id.toString(), v]));
+            
+            data.forEach(v => {
+              visitorMap.set(v.id.toString(), {
+                id: v.id,
+                name: v.name,
+                phone: v.phone,
+                isFirstTime: v.isFirstTime,
+                date: v.date
+              });
+            });
+            
+            AppState.visitors = Array.from(visitorMap.values());
+            localStorage.setItem('churchVisitors', JSON.stringify(AppState.visitors));
+          }
+          
+          // Processa operações pendentes
+          await this.processPendingOperations();
+        } catch (error) {
+          console.error('Erro ao sincronizar com Supabase:', error);
+        }
       }
       
       this.updateStats();
@@ -123,70 +166,19 @@ const DataManager = {
       return false;
     }
   },
-
-  // Sincroniza dados com Supabase - função separada para reutilização
-  async syncWithSupabase() {
-    if (!supabaseEnabled || !navigator.onLine) return false;
-    
-    try {
-      // Verificar conexão primeiro
-      const { data: connectionTest, error: connectionError } = await supabase
-        .from('visitors')
-        .select('count')
-        .limit(1);
-      
-      if (connectionError) {
-        console.warn('Problema de conexão com Supabase:', connectionError);
-        return false;
-      }
-      
-      // Processar operações pendentes ANTES de buscar dados
-      await this.processPendingOperations();
-      
-      // Buscar dados atualizados após sincronização
-      const { data, error } = await supabase.from('visitors').select('*');
-      
-      if (error) throw error;
-      
-      if (data && data.length > 0) {
-        // Usa Map para mesclagem eficiente de dados
-        const visitorMap = new Map(AppState.visitors.map(v => [v.id.toString(), v]));
-        
-        data.forEach(v => {
-          visitorMap.set(v.id.toString(), {
-            id: v.id,
-            name: v.name,
-            phone: v.phone,
-            isFirstTime: v.isFirstTime,
-            date: v.date
-          });
-        });
-        
-        AppState.visitors = Array.from(visitorMap.values());
-        localStorage.setItem('churchVisitors', JSON.stringify(AppState.visitors));
-        this.updateStats();
-      }
-      
-      return true;
-    } catch (error) {
-      console.error('Erro ao sincronizar com Supabase:', error);
-      return false;
-    }
-  },
   
   // Processa operações pendentes
   async processPendingOperations() {
-    if (!supabaseEnabled || !navigator.onLine) return false;
+    if (!supabaseEnabled || !navigator.onLine) return;
     
     try {
       // Recuperar operações pendentes
       const pendingOperations = JSON.parse(localStorage.getItem('pendingSync') || '[]');
-      if (pendingOperations.length === 0) return true;
+      if (pendingOperations.length === 0) return;
       
       console.log(`Processando ${pendingOperations.length} operações pendentes...`);
       
       const successfulOps = [];
-      const failedOps = [];
       
       for (const op of pendingOperations) {
         try {
@@ -204,8 +196,7 @@ const DataManager = {
             if (!error) {
               successfulOps.push(op);
             } else {
-              console.error('Erro ao inserir visitante no Supabase:', error);
-              failedOps.push(op);
+              console.error('Erro ao inserir operação pendente:', error);
             }
           } else if (op.operation === 'delete') {
             const { error } = await supabase
@@ -216,29 +207,29 @@ const DataManager = {
             if (!error) {
               successfulOps.push(op);
             } else {
-              console.error('Erro ao excluir visitante no Supabase:', error);
-              failedOps.push(op);
+              console.error('Erro ao excluir operação pendente:', error);
             }
           }
         } catch (opError) {
           console.error(`Erro ao processar operação pendente:`, opError);
-          failedOps.push(op);
         }
       }
       
-      // Atualizar lista de operações pendentes (manter apenas as com falha)
-      if (successfulOps.length > 0 || failedOps.length > 0) {
-        localStorage.setItem('pendingSync', JSON.stringify(failedOps));
+      // Remover operações bem-sucedidas da lista de pendentes
+      if (successfulOps.length > 0) {
+        const remainingOps = pendingOperations.filter(op => 
+          !successfulOps.some(sop => 
+            sop.operation === op.operation && 
+            ((op.operation === 'insert' && sop.data.id === op.data.id) || 
+             (op.operation === 'delete' && sop.id === op.id))
+          )
+        );
+        
+        localStorage.setItem('pendingSync', JSON.stringify(remainingOps));
         console.log(`${successfulOps.length} operações sincronizadas com sucesso.`);
-        if (failedOps.length > 0) {
-          console.log(`${failedOps.length} operações falharam e serão tentadas novamente.`);
-        }
       }
-      
-      return successfulOps.length > 0;
     } catch (error) {
       console.error("Erro ao processar operações pendentes:", error);
-      return false;
     }
   },
   
@@ -258,6 +249,7 @@ const DataManager = {
       // Tenta adicionar ao Supabase em segundo plano
       if (supabaseEnabled && navigator.onLine) {
         try {
+          // Inserir o dado no Supabase
           const { error } = await supabase
             .from('visitors')
             .insert([{
@@ -269,11 +261,13 @@ const DataManager = {
             }]);
           
           if (error) {
-            console.error('Erro específico ao inserir no Supabase:', error);
+            console.error('Erro ao inserir no Supabase:', error);
             // Implementar sistema de fila para tentar novamente depois
             const pendingOps = JSON.parse(localStorage.getItem('pendingSync') || '[]');
             pendingOps.push({ operation: 'insert', data: visitorData });
             localStorage.setItem('pendingSync', JSON.stringify(pendingOps));
+          } else {
+            console.log('Visitante adicionado com sucesso ao Supabase:', visitorData.name);
           }
         } catch (error) {
           console.error('Erro ao adicionar visitante ao Supabase:', error);
@@ -283,7 +277,7 @@ const DataManager = {
           localStorage.setItem('pendingSync', JSON.stringify(pendingOps));
         }
       } else {
-        // Garantir que seja adicionado às operações pendentes se offline
+        // Não está online ou Supabase não está disponível, armazenar para sincronização posterior
         const pendingOps = JSON.parse(localStorage.getItem('pendingSync') || '[]');
         pendingOps.push({ operation: 'insert', data: visitorData });
         localStorage.setItem('pendingSync', JSON.stringify(pendingOps));
@@ -293,31 +287,6 @@ const DataManager = {
     } catch (error) {
       console.error('Erro ao adicionar visitante:', error);
       return false;
-    }
-  },
-  
-  // Tenta sincronizar periodicamente
-  setupPeriodicSync(intervalMs = 60000) {
-    // Verificar e sincronizar a cada intervalo
-    this.syncInterval = setInterval(async () => {
-      if (navigator.onLine && supabaseEnabled) {
-        await this.syncWithSupabase();
-      }
-    }, intervalMs);
-    
-    // Também sincronizar quando voltar online
-    window.addEventListener('online', async () => {
-      console.log('Conexão restaurada, sincronizando dados...');
-      if (supabaseEnabled) {
-        await this.syncWithSupabase();
-      }
-    });
-  },
-  
-  // Limpar intervalo quando necessário
-  clearPeriodicSync() {
-    if (this.syncInterval) {
-      clearInterval(this.syncInterval);
     }
   },
   
@@ -434,17 +403,6 @@ const UIManager = {
         DOM.datePickerDropdown.style.display = 'none';
       }
     });
-    
-    // Adicionando eventos para detectar quando o usuário está prestes a sair/navegar
-    window.addEventListener('beforeunload', async () => {
-      // Tentar sincronizar antes de sair se houver operações pendentes
-      if (navigator.onLine && supabaseEnabled) {
-        const pendingOps = JSON.parse(localStorage.getItem('pendingSync') || '[]');
-        if (pendingOps.length > 0) {
-          await DataManager.processPendingOperations();
-        }
-      }
-    });
   },
   
   // Inicializa toda a interface
@@ -454,19 +412,45 @@ const UIManager = {
   }
 };
 
+// Adicionar um listener para verificar periodicamente se há operações pendentes
+// e tentar sincronizar quando estiver online
+window.addEventListener('online', async () => {
+  console.log('Conexão online detectada, verificando operações pendentes...');
+  // Carrega o Supabase se necessário e processa pendências
+  if (!supabaseEnabled && supabaseUrl && supabaseKey) {
+    try {
+      await loadSupabase();
+      await DataManager.processPendingOperations();
+    } catch (error) {
+      console.error('Erro ao processar operações pendentes após ficar online:', error);
+    }
+  } else if (supabaseEnabled) {
+    await DataManager.processPendingOperations();
+  }
+});
+
 // Inicialização da aplicação
 async function init() {
   try {
-    // Verificar e carregar Supabase se necessário
-    if (!supabase && supabaseUrl && supabaseKey) {
-      await loadSupabase();
+    // Inicializa a UI primeiro para feedback visual imediato
+    UIManager.init();
+    
+    // Carregar Supabase antes de carregar os dados
+    if (supabaseUrl && supabaseKey) {
+      try {
+        await loadSupabase();
+      } catch (error) {
+        console.warn('Não foi possível carregar Supabase, funcionando em modo offline:', error);
+      }
     }
     
-    UIManager.init();
+    // Carrega os dados (locais e remotos)
     await DataManager.load();
     
-    // Configurar sincronização periódica após carregar
-    DataManager.setupPeriodicSync(30000); // Sincroniza a cada 30 segundos
+    // Verifica se há operações pendentes para processar
+    if (supabaseEnabled && navigator.onLine) {
+      DataManager.processPendingOperations();
+    }
   } catch (error) {
     console.error('Erro ao inicializar aplicação:', error);
     ModalUtil.alert({
