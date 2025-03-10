@@ -19,14 +19,6 @@ const supabase = supabaseUrl && supabaseKey ?
   (window.supabase ? window.supabase.createClient(supabaseUrl, supabaseKey) : null) : null;
 const isSupabaseAvailable = !!supabase;
 
-// Configurações de cache e batchSize para otimização
-const SYNC_CONFIG = {
-  cacheTimeMs: 60000, // 1 minuto de cache para consultas
-  batchSize: 25, // Tamanho do lote para inserções em massa
-  lastSyncTimestamp: 0, // Timestamp da última sincronização
-  syncInProgress: false // Flag para evitar sincronizações simultâneas
-};
-
 // Cache de elementos DOM para melhor performance
 const DOM = {
   dateFilterBtn: document.getElementById('dateFilterBtn'),
@@ -110,25 +102,13 @@ const DataManager = {
   
   // Sincronizar dados com Supabase de forma eficiente
   async syncWithSupabase(retryCount = 0) {
-    if (!isSupabaseAvailable || !navigator.onLine || SYNC_CONFIG.syncInProgress) return;
-    
-    // Evitar sincronizações simultâneas
-    SYNC_CONFIG.syncInProgress = true;
+    if (!isSupabaseAvailable || !navigator.onLine) return;
     
     try {
-      // Verificar se o cache ainda é válido
-      const now = Date.now();
-      if (now - SYNC_CONFIG.lastSyncTimestamp < SYNC_CONFIG.cacheTimeMs) {
-        console.log('Usando dados em cache, próxima sincronização em', 
-          Math.round((SYNC_CONFIG.cacheTimeMs - (now - SYNC_CONFIG.lastSyncTimestamp)) / 1000), 'segundos');
-        SYNC_CONFIG.syncInProgress = false;
-        return;
-      }
-      
-      // Verificar conexão primeiro usando uma consulta leve
+      // Verificar conexão primeiro
       const { data: connectionTest, error: connectionError } = await supabase
         .from('visitors')
-        .select('id')
+        .select('count')
         .limit(1);
       
       if (connectionError) {
@@ -136,37 +116,20 @@ const DataManager = {
         throw connectionError;
       }
       
-      // Conexão OK, buscar dados com paginação para melhor performance
-      let allData = [];
-      let page = 0;
-      const pageSize = 100; // Tamanho maior para reduzir número de requisições
-      let hasMore = true;
+      // Conexão OK, buscar dados
+      const { data, error } = await supabase
+        .from('visitors')
+        .select('*')
+        .order('id', { ascending: false });
       
-      while (hasMore) {
-        // Usar RLS e índices para consultas mais rápidas
-        const { data, error } = await supabase
-          .from('visitors')
-          .select('id, name, phone, isFirstTime, date')
-          .range(page * pageSize, (page + 1) * pageSize - 1)
-          .order('id', { ascending: false });
-        
-        if (error) throw error;
-        
-        if (data && data.length > 0) {
-          allData = [...allData, ...data];
-          page++;
-        }
-        
-        // Verificar se há mais dados
-        hasMore = data && data.length === pageSize;
-      }
+      if (error) throw error;
       
-      if (allData.length > 0) {
+      if (data && data.length > 0) {
         // Usar Map para mesclagem eficiente de dados
         const visitorMap = new Map(visitors.map(v => [v.id.toString(), v]));
         
         // Adicionar ou atualizar com dados do Supabase
-        allData.forEach(v => {
+        data.forEach(v => {
           visitorMap.set(v.id.toString(), {
             id: v.id,
             name: v.name,
@@ -177,22 +140,13 @@ const DataManager = {
         });
         
         visitors = Array.from(visitorMap.values());
-        
-        // Usar armazenamento indexado para listas grandes
-        if (visitors.length > 1000 && window.indexedDB) {
-          this.storeInIndexedDB(visitors);
-        } else {
-          localStorage.setItem('churchVisitors', JSON.stringify(visitors));
-        }
+        localStorage.setItem('churchVisitors', JSON.stringify(visitors));
         
         // Atualiza a UI com novos dados
         this.processVisitors();
         
         // Tenta sincronizar operações pendentes
         await this.processPendingOperations();
-        
-        // Atualizar timestamp de última sincronização
-        SYNC_CONFIG.lastSyncTimestamp = now;
       }
     } catch (error) {
       console.error("Erro ao sincronizar com Supabase:", error);
@@ -203,59 +157,13 @@ const DataManager = {
         console.log(`Tentando novamente em ${timeout/1000} segundos...`);
         
         setTimeout(() => {
-          SYNC_CONFIG.syncInProgress = false;
           this.syncWithSupabase(retryCount + 1);
         }, timeout);
-      } else {
-        SYNC_CONFIG.syncInProgress = false;
-      }
-    } finally {
-      if (retryCount >= 3 || !navigator.onLine) {
-        SYNC_CONFIG.syncInProgress = false;
       }
     }
   },
   
-  // Método para armazenar dados em IndexedDB para listas muito grandes
-  storeInIndexedDB(visitorsList) {
-    if (!window.indexedDB) return;
-    
-    const request = indexedDB.open('ChurchVisitorsDB', 1);
-    
-    request.onupgradeneeded = function(event) {
-      const db = event.target.result;
-      if (!db.objectStoreNames.contains('visitors')) {
-        db.createObjectStore('visitors', { keyPath: 'id' });
-      }
-    };
-    
-    request.onsuccess = function(event) {
-      const db = event.target.result;
-      const transaction = db.transaction(['visitors'], 'readwrite');
-      const store = transaction.objectStore('visitors');
-      
-      // Limpar store existente
-      store.clear();
-      
-      // Armazenar visitantes em lotes para melhor performance
-      for (const visitor of visitorsList) {
-        store.put(visitor);
-      }
-      
-      // Também manter uma versão menor no localStorage para inicialização rápida
-      const recentVisitors = visitorsList.slice(0, 100);
-      localStorage.setItem('churchVisitors', JSON.stringify(recentVisitors));
-      localStorage.setItem('hasMoreInIndexedDB', 'true');
-    };
-    
-    request.onerror = function(event) {
-      console.error("Erro ao acessar IndexedDB:", event.target.error);
-      // Fallback para localStorage
-      localStorage.setItem('churchVisitors', JSON.stringify(visitorsList));
-    };
-  },
-  
-  // Adicione este novo método para processar operações pendentes com suporte a lotes
+  // Adicione este novo método para processar operações pendentes
   async processPendingOperations() {
     if (!isSupabaseAvailable || !navigator.onLine) return;
     
@@ -266,27 +174,25 @@ const DataManager = {
       
       console.log(`Processando ${pendingOperations.length} operações pendentes...`);
       
-      // Separar operações por tipo
-      const insertOps = pendingOperations.filter(op => op.operation === 'insert');
-      const deleteOps = pendingOperations.filter(op => op.operation === 'delete');
-      
       const successfulOps = [];
       
-      // Processar exclusões primeiro
-      if (deleteOps.length > 0) {
-        const deleteIds = deleteOps.map(op => op.id);
-        
-        // Usar "in" para operações em lote
-        const { error } = await supabase
-          .from('visitors')
-          .delete()
-          .in('id', deleteIds);
-        
-        if (!error) {
-          successfulOps.push(...deleteOps);
-        } else {
-          // Tentar um por um se o lote falhar
-          for (const op of deleteOps) {
+      for (const op of pendingOperations) {
+        try {
+          if (op.operation === 'insert') {
+            const { error } = await supabase
+              .from('visitors')
+              .insert([{
+                id: op.data.id,
+                name: op.data.name,
+                phone: op.data.phone,
+                isFirstTime: op.data.isFirstTime,
+                date: op.data.date
+              }]);
+            
+            if (!error) {
+              successfulOps.push(op);
+            }
+          } else if (op.operation === 'delete') {
             const { error } = await supabase
               .from('visitors')
               .delete()
@@ -296,45 +202,8 @@ const DataManager = {
               successfulOps.push(op);
             }
           }
-        }
-      }
-      
-      // Processar inserções em lote
-      if (insertOps.length > 0) {
-        for (let i = 0; i < insertOps.length; i += SYNC_CONFIG.batchSize) {
-          const batch = insertOps.slice(i, i + SYNC_CONFIG.batchSize);
-          const batchData = batch.map(op => ({
-            id: op.data.id,
-            name: op.data.name,
-            phone: op.data.phone,
-            isFirstTime: op.data.isFirstTime,
-            date: op.data.date
-          }));
-          
-          const { error } = await supabase
-            .from('visitors')
-            .upsert(batchData, { onConflict: 'id' });
-          
-          if (!error) {
-            successfulOps.push(...batch);
-          } else {
-            // Tentar um por um se o lote falhar
-            for (const op of batch) {
-              const { error } = await supabase
-                .from('visitors')
-                .upsert([{
-                  id: op.data.id,
-                  name: op.data.name,
-                  phone: op.data.phone,
-                  isFirstTime: op.data.isFirstTime,
-                  date: op.data.date
-                }], { onConflict: 'id' });
-              
-              if (!error) {
-                successfulOps.push(op);
-              }
-            }
-          }
+        } catch (opError) {
+          console.error(`Erro ao processar operação pendente:`, opError);
         }
       }
       
@@ -365,51 +234,8 @@ const DataManager = {
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'visitors' }, 
         payload => {
-          // Implementar sincronização inteligente baseada no tipo de evento
-          const eventType = payload.eventType;
-          
-          if (eventType === 'INSERT') {
-            // Otimização: Adicionar apenas o novo registro sem recarregar tudo
-            const newVisitor = payload.new;
-            if (newVisitor) {
-              // Verificar se já existe
-              const existingIndex = visitors.findIndex(v => v.id === newVisitor.id);
-              if (existingIndex === -1) {
-                visitors.unshift({
-                  id: newVisitor.id,
-                  name: newVisitor.name,
-                  phone: newVisitor.phone,
-                  isFirstTime: newVisitor.isFirstTime,
-                  date: newVisitor.date
-                });
-                
-                // Atualizar localStorage
-                localStorage.setItem('churchVisitors', JSON.stringify(visitors));
-                
-                // Atualizar UI
-                this.processVisitors();
-              }
-            }
-          } else if (eventType === 'DELETE') {
-            // Otimização: Remover apenas o registro excluído sem recarregar tudo
-            const oldVisitor = payload.old;
-            if (oldVisitor) {
-              visitors = visitors.filter(v => v.id !== oldVisitor.id);
-              
-              // Atualizar localStorage
-              localStorage.setItem('churchVisitors', JSON.stringify(visitors));
-              
-              // Atualizar UI
-              this.processVisitors();
-            }
-          } else {
-            // UPDATE ou outros eventos: sincronizar normalmente
-            // Usar timestamp para evitar sincronizações frequentes demais
-            const now = Date.now();
-            if (now - SYNC_CONFIG.lastSyncTimestamp > 5000) { // 5 segundos entre sincronizações
-              this.syncWithSupabase();
-            }
-          }
+          // Sincroniza apenas quando há mudanças reais
+          this.syncWithSupabase();
         }
       )
       .subscribe(status => {
@@ -443,64 +269,43 @@ const DataManager = {
     // Remove do Supabase em segundo plano
     if (isSupabaseAvailable && navigator.onLine) {
       try {
-        // Verificar conexão primeiro com timeout curto
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        // Verificar conexão primeiro
+        const { data: connectionTest, error: connectionError } = await supabase
+          .from('visitors')
+          .select('count')
+          .limit(1);
+        
+        if (connectionError) {
+          console.warn('Problema de conexão com Supabase:', connectionError);
+          // Adicionar à fila de operações pendentes
+          localStorage.setItem('pendingSync', JSON.stringify([
+            ...(JSON.parse(localStorage.getItem('pendingSync') || '[]')),
+            { operation: 'delete', id }
+          ]));
+          return;
+        }
         
         const { error } = await supabase
           .from('visitors')
           .delete()
-          .eq('id', id)
-          .abortSignal(controller.signal);
-        
-        clearTimeout(timeoutId);
+          .eq('id', id);
         
         if (error) {
-          console.warn("Erro ao remover visitante do Supabase:", error);
+          console.error("Erro ao remover visitante do Supabase:", error);
           // Adicionar à fila de operações pendentes
-          this.addToPendingOperations('delete', id);
+          localStorage.setItem('pendingSync', JSON.stringify([
+            ...(JSON.parse(localStorage.getItem('pendingSync') || '[]')),
+            { operation: 'delete', id }
+          ]));
         }
       } catch (error) {
-        console.warn("Erro ao remover visitante do Supabase:", error);
+        console.error("Erro ao remover visitante do Supabase:", error);
         // Adicionar à fila de operações pendentes
-        this.addToPendingOperations('delete', id);
+        localStorage.setItem('pendingSync', JSON.stringify([
+          ...(JSON.parse(localStorage.getItem('pendingSync') || '[]')),
+          { operation: 'delete', id }
+        ]));
       }
-    } else {
-      // Adicionar à fila de operações pendentes
-      this.addToPendingOperations('delete', id);
-    }
-  },
-  
-  // Método auxiliar para adicionar operações pendentes
-  addToPendingOperations(operation, idOrData) {
-    const pendingOperations = JSON.parse(localStorage.getItem('pendingSync') || '[]');
-    
-    // Verificar se a operação já existe para evitar duplicação
-    const existingIndex = pendingOperations.findIndex(op => 
-      op.operation === operation && 
-      (operation === 'delete' ? op.id === idOrData : op.data.id === idOrData.id)
-    );
-    
-    if (existingIndex !== -1) {
-      // Substituir se já existir
-      pendingOperations[existingIndex] = { 
-        operation, 
-        ...(operation === 'delete' ? { id: idOrData } : { data: idOrData }) 
-      };
-    } else {
-      // Adicionar nova operação
-      pendingOperations.push({ 
-        operation, 
-        ...(operation === 'delete' ? { id: idOrData } : { data: idOrData }),
-        timestamp: Date.now() 
-      });
-    }
-    
-    localStorage.setItem('pendingSync', JSON.stringify(pendingOperations));
-    
-    // Tentar sincronizar imediatamente se estiver online
-    if (navigator.onLine) {
-      this.processPendingOperations();
     }
   },
   
@@ -819,23 +624,20 @@ const UIManager = {
       DataManager.processVisitors();
     });
     
-    // Botão de pesquisa com debounce
-    let searchTimeout;
-    const performSearch = () => {
+    // Remover evento de input automático para o filtro de nome
+    // Agora a pesquisa só ocorre ao clicar no botão de pesquisa
+    
+    // Botão de pesquisa
+    DOM.searchBtn.addEventListener('click', () => {
       filters.name = DOM.nameFilter.value.trim();
       DataManager.processVisitors();
-    };
-    
-    DOM.searchBtn.addEventListener('click', () => {
-      clearTimeout(searchTimeout);
-      performSearch();
     });
     
-    // Pesquisa ao pressionar Enter com debounce
+    // Pesquisa ao pressionar Enter
     DOM.nameFilter.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') {
-        clearTimeout(searchTimeout);
-        performSearch();
+        filters.name = e.target.value.trim();
+        DataManager.processVisitors();
       }
     });
     

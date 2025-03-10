@@ -1,8 +1,7 @@
 // Estado da aplicação com estrutura mais organizada
 const AppState = {
   visitors: [],
-  selectedDate: new Date(),
-  lastSyncTimestamp: null // Adicionado para controle de sincronização incremental
+  selectedDate: new Date()
 };
 
 // Elementos do DOM com cache para melhor performance
@@ -69,46 +68,6 @@ const supabase = supabaseUrl && supabaseKey ?
   (window.supabase ? window.supabase.createClient(supabaseUrl, supabaseKey) : null) : null;
 let supabaseEnabled = !!supabase;
 
-// Cache para evitar consultas repetidas
-const VisitorCache = {
-  // Cache por data
-  byDate: new Map(),
-  
-  // Adiciona visitantes ao cache
-  addToCache(visitorsList) {
-    if (!Array.isArray(visitorsList)) return;
-    
-    visitorsList.forEach(visitor => {
-      if (!visitor.date) return;
-      
-      if (!this.byDate.has(visitor.date)) {
-        this.byDate.set(visitor.date, []);
-      }
-      
-      // Evitar duplicação no cache
-      const dateVisitors = this.byDate.get(visitor.date);
-      const existingIndex = dateVisitors.findIndex(v => v.id === visitor.id);
-      
-      if (existingIndex >= 0) {
-        dateVisitors[existingIndex] = visitor;
-      } else {
-        dateVisitors.push(visitor);
-      }
-    });
-  },
-  
-  // Obtém visitantes para uma data específica
-  getByDate(date) {
-    const formattedDate = DateUtils.formatToBR(date);
-    return this.byDate.has(formattedDate) ? this.byDate.get(formattedDate) : [];
-  },
-  
-  // Limpa cache
-  clear() {
-    this.byDate.clear();
-  }
-};
-
 // Função para carregar Supabase dinamicamente
 function loadSupabase() {
   return new Promise((resolve, reject) => {
@@ -134,7 +93,7 @@ function loadSupabase() {
 
 // Gerenciamento de dados otimizado
 const DataManager = {
-  // Carrega dados com implementação assíncrona e otimizada
+  // Carrega dados com implementação assíncrona
   async load() {
     try {
       // Verifica e carrega Supabase se necessário
@@ -155,27 +114,22 @@ const DataManager = {
       const storedVisitors = localStorage.getItem('churchVisitors');
       AppState.visitors = storedVisitors ? JSON.parse(storedVisitors) : [];
       
-      // Carregar timestamp da última sincronização
-      AppState.lastSyncTimestamp = localStorage.getItem('lastSyncTimestamp') 
-        ? parseInt(localStorage.getItem('lastSyncTimestamp'), 10)
-        : 0;
-      
-      // Preencher cache inicial
-      VisitorCache.addToCache(AppState.visitors);
-      
       // Sincroniza com Supabase em segundo plano se disponível
       if (supabaseEnabled && navigator.onLine) {
         try {
-          // Otimizando: Verificar conexão e buscar dados em uma única operação
-          let query = supabase.from('visitors').select('*');
+          // Verificar conexão primeiro
+          const { data: connectionTest, error: connectionError } = await supabase
+            .from('visitors')
+            .select('count')
+            .limit(1);
           
-          // Sincronização incremental: buscar apenas dados novos ou alterados
-          if (AppState.lastSyncTimestamp) {
-            query = query.gt('updated_at', new Date(AppState.lastSyncTimestamp).toISOString());
+          if (connectionError) {
+            console.warn('Problema de conexão com Supabase:', connectionError);
+            throw connectionError;
           }
           
-          // Limitar número de registros por consulta para melhor performance
-          const { data, error } = await query.order('id', { ascending: false }).limit(500);
+          // Conexão OK, buscar dados
+          const { data, error } = await supabase.from('visitors').select('*');
           
           if (error) throw error;
           
@@ -195,14 +149,6 @@ const DataManager = {
             
             AppState.visitors = Array.from(visitorMap.values());
             localStorage.setItem('churchVisitors', JSON.stringify(AppState.visitors));
-            
-            // Atualizar cache
-            VisitorCache.clear();
-            VisitorCache.addToCache(AppState.visitors);
-            
-            // Atualizar timestamp de sincronização
-            AppState.lastSyncTimestamp = Date.now();
-            localStorage.setItem('lastSyncTimestamp', AppState.lastSyncTimestamp.toString());
           }
           
           // Processa operações pendentes
@@ -221,7 +167,7 @@ const DataManager = {
     }
   },
   
-  // Processa operações pendentes com tratamento em lote
+  // Processa operações pendentes
   async processPendingOperations() {
     if (!supabaseEnabled || !navigator.onLine) return;
     
@@ -233,91 +179,35 @@ const DataManager = {
       console.log(`Processando ${pendingOperations.length} operações pendentes...`);
       
       const successfulOps = [];
-      const batchSize = 50; // Tamanho do lote para operações em batch
       
-      // Agrupar operações por tipo para processamento em lote
-      const insertOps = pendingOperations.filter(op => op.operation === 'insert');
-      const deleteOps = pendingOperations.filter(op => op.operation === 'delete');
-      
-      // Processar inserções em lote
-      if (insertOps.length > 0) {
-        for (let i = 0; i < insertOps.length; i += batchSize) {
-          const batch = insertOps.slice(i, i + batchSize);
-          const insertData = batch.map(op => ({
-            id: op.data.id,
-            name: op.data.name,
-            phone: op.data.phone,
-            isFirstTime: op.data.isFirstTime,
-            date: op.data.date
-          }));
-          
-          try {
-            const { error } = await supabase.from('visitors').insert(insertData);
+      for (const op of pendingOperations) {
+        try {
+          if (op.operation === 'insert') {
+            const { error } = await supabase
+              .from('visitors')
+              .insert([{
+                id: op.data.id,
+                name: op.data.name,
+                phone: op.data.phone,
+                isFirstTime: op.data.isFirstTime,
+                date: op.data.date
+              }]);
             
             if (!error) {
-              successfulOps.push(...batch);
-            } else {
-              // Se falhar o lote, tenta individualmente para identificar registros problemáticos
-              for (const op of batch) {
-                try {
-                  const { error: indivError } = await supabase
-                    .from('visitors')
-                    .insert([{
-                      id: op.data.id,
-                      name: op.data.name,
-                      phone: op.data.phone,
-                      isFirstTime: op.data.isFirstTime,
-                      date: op.data.date
-                    }]);
-                  
-                  if (!indivError) {
-                    successfulOps.push(op);
-                  }
-                } catch (e) {
-                  console.error('Erro ao inserir individualmente:', e);
-                }
-              }
+              successfulOps.push(op);
             }
-          } catch (batchError) {
-            console.error('Erro ao processar lote de inserções:', batchError);
-          }
-        }
-      }
-      
-      // Processar exclusões em lote
-      if (deleteOps.length > 0) {
-        for (let i = 0; i < deleteOps.length; i += batchSize) {
-          const batch = deleteOps.slice(i, i + batchSize);
-          const ids = batch.map(op => op.id);
-          
-          try {
+          } else if (op.operation === 'delete') {
             const { error } = await supabase
               .from('visitors')
               .delete()
-              .in('id', ids);
+              .eq('id', op.id);
             
             if (!error) {
-              successfulOps.push(...batch);
-            } else {
-              // Se falhar o lote, tenta individualmente
-              for (const op of batch) {
-                try {
-                  const { error: indivError } = await supabase
-                    .from('visitors')
-                    .delete()
-                    .eq('id', op.id);
-                  
-                  if (!indivError) {
-                    successfulOps.push(op);
-                  }
-                } catch (e) {
-                  console.error('Erro ao excluir individualmente:', e);
-                }
-              }
+              successfulOps.push(op);
             }
-          } catch (batchError) {
-            console.error('Erro ao processar lote de exclusões:', batchError);
           }
+        } catch (opError) {
+          console.error(`Erro ao processar operação pendente:`, opError);
         }
       }
       
@@ -339,7 +229,7 @@ const DataManager = {
     }
   },
   
-  // Adiciona visitante com implementação de cache e retry otimizados
+  // Adiciona visitante com implementação de cache e retry
   async addVisitor(visitorData) {
     try {
       // Adiciona ID se não existir
@@ -350,53 +240,25 @@ const DataManager = {
       // Adiciona localmente primeiro para feedback imediato
       AppState.visitors.push(visitorData);
       localStorage.setItem('churchVisitors', JSON.stringify(AppState.visitors));
-      
-      // Atualizar cache
-      VisitorCache.addToCache([visitorData]);
-      
       this.updateStats();
       
       // Tenta adicionar ao Supabase em segundo plano
       if (supabaseEnabled && navigator.onLine) {
-        // Usar sendBeacon para operações assíncronas não-bloqueantes quando disponível
-        if (navigator.sendBeacon && typeof Blob !== 'undefined') {
-          try {
-            const data = {
-              method: 'POST',
-              path: `rest/v1/visitors`,
-              headers: {
-                'Content-Type': 'application/json',
-                'apikey': supabaseKey,
-                'Prefer': 'return=minimal'
-              },
-              body: JSON.stringify([{
-                id: visitorData.id,
-                name: visitorData.name,
-                phone: visitorData.phone,
-                isFirstTime: visitorData.isFirstTime,
-                date: visitorData.date
-              }])
-            };
-            
-            const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-            const beaconSuccess = navigator.sendBeacon(`${supabaseUrl}/rest/v1/visitors`, blob);
-            
-            if (!beaconSuccess) {
-              throw new Error('sendBeacon failed');
-            }
-            
-            return true;
-          } catch (beaconError) {
-            console.warn('Falha ao usar sendBeacon, tentando método alternativo:', beaconError);
-            // Continuar com método tradicional se sendBeacon falhar
-          }
-        }
-        
         try {
-          // Otimização: usar um timeout para evitar esperas muito longas
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 segundos timeout
+          // Verificar conexão com Supabase antes de tentar operação
+          const { data: connectionTest, error: connectionError } = await supabase.from('visitors').select('count').limit(1);
           
+          if (connectionError) {
+            console.warn('Problema de conexão com Supabase:', connectionError);
+            // Armazenar para sincronização posterior
+            localStorage.setItem('pendingSync', JSON.stringify([
+              ...(JSON.parse(localStorage.getItem('pendingSync') || '[]')),
+              { operation: 'insert', data: visitorData }
+            ]));
+            return true; // Continua com sucesso local mesmo com erro de conexão
+          }
+          
+          // Conexão ok, agora insere o dado
           const { error } = await supabase
             .from('visitors')
             .insert([{
@@ -405,23 +267,24 @@ const DataManager = {
               phone: visitorData.phone,
               isFirstTime: visitorData.isFirstTime,
               date: visitorData.date
-            }], { signal: controller.signal });
-          
-          clearTimeout(timeoutId);
+            }]);
           
           if (error) {
             console.error('Erro específico ao inserir no Supabase:', error);
             // Implementar sistema de fila para tentar novamente depois
-            this.addToPendingOperations('insert', visitorData);
+            localStorage.setItem('pendingSync', JSON.stringify([
+              ...(JSON.parse(localStorage.getItem('pendingSync') || '[]')),
+              { operation: 'insert', data: visitorData }
+            ]));
           }
         } catch (error) {
           console.error('Erro ao adicionar visitante ao Supabase:', error);
           // Armazenar para sincronização posterior
-          this.addToPendingOperations('insert', visitorData);
+          localStorage.setItem('pendingSync', JSON.stringify([
+            ...(JSON.parse(localStorage.getItem('pendingSync') || '[]')),
+            { operation: 'insert', data: visitorData }
+          ]));
         }
-      } else {
-        // Offline ou Supabase desabilitado: adicionar à fila de sincronização
-        this.addToPendingOperations('insert', visitorData);
       }
       
       return true;
@@ -431,50 +294,13 @@ const DataManager = {
     }
   },
   
-  // Adiciona operação à fila de sincronização pendente
-  addToPendingOperations(operation, data) {
-    const pendingOperations = JSON.parse(localStorage.getItem('pendingSync') || '[]');
-    
-    // Verificar se já existe operação idêntica para evitar duplicações
-    const existingIndex = pendingOperations.findIndex(op => 
-      op.operation === operation && 
-      ((operation === 'insert' && op.data && op.data.id === data.id) ||
-       (operation === 'delete' && op.id === data))
-    );
-    
-    if (existingIndex >= 0) {
-      // Se já existe, atualizar em vez de adicionar novamente
-      if (operation === 'insert') {
-        pendingOperations[existingIndex].data = data;
-      }
-    } else {
-      // Caso contrário, adicionar nova operação
-      if (operation === 'insert') {
-        pendingOperations.push({ operation, data });
-      } else if (operation === 'delete') {
-        pendingOperations.push({ operation, id: data });
-      }
-    }
-    
-    localStorage.setItem('pendingSync', JSON.stringify(pendingOperations));
-  },
-  
-  // Atualiza estatísticas da data atual usando cache
+  // Atualiza estatísticas da data atual
   updateStats() {
     const todayFormatted = DateUtils.formatToBR(AppState.selectedDate);
+    const todayVisitors = AppState.visitors.filter(v => v.date === todayFormatted);
     
-    // Usar o cache para performance
-    const todayVisitors = VisitorCache.getByDate(AppState.selectedDate);
-    
-    // Fallback para método original se o cache falhar
-    const visitorCount = todayVisitors.length || 
-      AppState.visitors.filter(v => v.date === todayFormatted).length;
-    
-    const firstTimeCount = todayVisitors.filter(v => v.isFirstTime).length || 
-      AppState.visitors.filter(v => v.date === todayFormatted && v.isFirstTime).length;
-    
-    DOM.todayVisitorsCount.textContent = visitorCount;
-    DOM.todayFirstTimeCount.textContent = firstTimeCount;
+    DOM.todayVisitorsCount.textContent = todayVisitors.length;
+    DOM.todayFirstTimeCount.textContent = todayVisitors.filter(v => v.isFirstTime).length;
   }
 };
 
@@ -517,12 +343,8 @@ const UIManager = {
       DataManager.updateStats();
     });
     
-    // Evento para adicionar visitante - implementação debounce para evitar submissões duplicadas
-    let submitInProgress = false;
+    // Evento para adicionar visitante
     DOM.addVisitorBtn.addEventListener('click', async () => {
-      if (submitInProgress) return;
-      submitInProgress = true;
-      
       const name = DOM.nameInput.value.trim();
       const phone = DOM.phoneInput.value.trim();
       const isFirstTime = DOM.firstTimeCheckbox.checked;
@@ -534,7 +356,6 @@ const UIManager = {
           message: 'Por favor, informe o nome do visitante.'
         });
         DOM.nameInput.focus();
-        submitInProgress = false;
         return;
       }
       
@@ -570,8 +391,6 @@ const UIManager = {
           message: 'Não foi possível registrar o visitante. Tente novamente mais tarde.'
         });
       }
-      
-      submitInProgress = false;
     });
     
     // Pressionar Enter no campo de telefone para enviar o formulário
@@ -586,13 +405,6 @@ const UIManager = {
       if (!DOM.dateSelectorBtn.contains(e.target) && 
           !DOM.datePickerDropdown.contains(e.target)) {
         DOM.datePickerDropdown.style.display = 'none';
-      }
-    });
-    
-    // Adicionar listener para sincronização em segundo plano quando a conectividade retornar
-    window.addEventListener('online', () => {
-      if (supabaseEnabled) {
-        DataManager.processPendingOperations();
       }
     });
   },
