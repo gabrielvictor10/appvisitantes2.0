@@ -61,8 +61,8 @@ const DateUtils = {
 };
 
 // Configuração do Supabase
-const supabaseUrl = window.CONFIG?.SUPABASE_URL || '';
-const supabaseKey = window.CONFIG?.SUPABASE_KEY || '';
+const supabaseUrl = 'https://qdttsbnsijllhkgrpdmc.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkdHRzYm5zaWpsbGhrZ3JwZG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExOTQzNDgsImV4cCI6MjA1Njc3MDM0OH0.CuZdeCC2wK73CrTt2cMIKxj20hAtgz_8qAhFt1EKkCw';
 // Inicializar como null e definir mais tarde quando o script do Supabase estiver carregado
 let supabase = null;
 let supabaseEnabled = false;
