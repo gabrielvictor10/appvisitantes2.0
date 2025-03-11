@@ -11,9 +11,10 @@ let pagination = {
   itemsPerPage: 10
 };
 
-// Inicialização do Supabase com o método do arquivo "script.js"
-const supabaseUrl = 'https://qdttsbnsijllhkgrpdmc.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkdHRzYm5zaWpsbGhrZ3JwZG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExOTQzNDgsImV4cCI6MjA1Njc3MDM0OH0.CuZdeCC2wK73CrTt2cMIKxj20hAtgz_8qAhFt1EKkCw';
+// Inicialização do Supabase usando window.CONFIG
+const supabaseUrl = window.CONFIG?.SUPABASE_URL || null;
+const supabaseKey = window.CONFIG?.SUPABASE_KEY || null;
+
 // Garantir inicialização correta do cliente Supabase
 const supabase = supabaseUrl && supabaseKey ? 
   (window.supabase ? window.supabase.createClient(supabaseUrl, supabaseKey) : null) : null;
